@@ -47,7 +47,7 @@ public class Packet {
 	private int len;	    // The length of the packet
 
 	// Main Method (ONLY FOR TESTING)
-	public static void main(String[] args) {
+	/**public static void main(String[] args) {
 		
 		// Here is some test data
 		byte[] test = {1,2,3,4,5,6,7,8,9,10};
@@ -62,7 +62,7 @@ public class Packet {
 		System.out.println(b.toString());
 		
 		// I haven't found any bugs yet...
-	}
+	}**/
 
 ///////////////////////////  Constructors  //////////////////////////////////////////////////////////////////////
 // There are 2 constructors for the packet class. The first one is designed to be used //////////////////////////

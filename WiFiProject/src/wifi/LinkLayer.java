@@ -2,7 +2,7 @@ package wifi;
 import java.io.PrintWriter;
 
 import rf.RF;
-
+import java.util.concurrent.ArrayBlockingQueue;
 /**
  * Use this layer as a starting point for your project code.  See {@link Dot11Interface} for more
  * details on these routines.
@@ -13,6 +13,8 @@ public class LinkLayer implements Dot11Interface
 	private RF theRF;           // You'll need one of these eventually
 	private short ourMAC;       // Our MAC address
 	private PrintWriter output; // The output stream we'll write to
+	private ArrayBlockingQueue<Packet> packets;
+	private ArrayBlockingQueue<Packet> acks;
 
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
@@ -24,6 +26,13 @@ public class LinkLayer implements Dot11Interface
 		this.ourMAC = ourMAC;
 		this.output = output;      
 		theRF = new RF(null, null);
+		this.packets = new ArrayBlockingQueue(10);
+		this.acks = new ArrayBlockingQueue(10);
+		
+		Receiver rec = new Receiver(theRF, ourMAC, acks );
+		new Thread(rec).start();
+		
+		
 		output.println("LinkLayer: Constructor ran.");
 	}
 
@@ -62,4 +71,5 @@ public class LinkLayer implements Dot11Interface
 		output.println("LinkLayer: Sending command "+cmd+" with value "+val);
 		return 0;
 	}
+	
 }
