@@ -31,7 +31,7 @@ public class Sender implements Runnable {
 		boolean used = true;
 		
 		//some kind of looping mechanism here??
-		
+		while(true) {
 		switch(theState) {	//the state is an integer corresponding to the case to enter
 			case 0:
 			//waiting for packet
@@ -56,7 +56,13 @@ public class Sender implements Runnable {
 			case 2:
 		//eventually peek at the acks to see if there is an ack for me!
 		}
-		
+		try {
+			Thread.sleep(RF.aSIFSTime);			//wait sifs after each loop so we're not busy waiting
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 		
 		//take packet from send() and go through waiting stuff, send! and ack recieval
 		
