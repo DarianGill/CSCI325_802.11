@@ -17,8 +17,6 @@ public class Receiver implements Runnable {
 	private short id;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
-	
-	//TODO: Create a local byte[] that holds just the data from each packet that comes in
 	private PriorityQueue<byte[]> dataArray;
 	
 	
