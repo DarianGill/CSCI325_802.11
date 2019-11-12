@@ -17,7 +17,7 @@ public class Receiver implements Runnable {
 	private short id;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
-	private PriorityQueue<byte[]> dataArray;
+	private PriorityQueue<byte[]> dataQ;
 	
 	
 	/**
@@ -43,22 +43,24 @@ public class Receiver implements Runnable {
 	 */
 	@Override
 	public void run() {
+		System.out.println("Receiver " + id + " is initialized. Tell me your secrets!");
+		
 		while(true) {
-			System.out.println("Receiver " + id + " is initialized. Tell me your secrets!");
 			try {
-				byte[] incoming = rf.receive();  
+				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming); 
-				
+				System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
+
 				// check the frame type
-				if (newPacket.getType().equals("Data")) {  //if its data, add packet to Packets ABQ
-					dataArray.add(extractData(newPacket));
+				if (newPacket.getType().equals("Data")) {  //if it's data, extract data and store in dataQ
+					System.out.println("Your secret is safe with me.");
 				}
 				else if (newPacket.getType().equals("ACK")) {  //if its an ack, add to Acks ABQ
 					acks.add(newPacket);
 				}
 			}
 			catch(Exception ex) {
-				System.err.println("There was an issue receiving the packet.");
+				ex.printStackTrace();
 			}
 		}
 	}
