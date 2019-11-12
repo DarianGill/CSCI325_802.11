@@ -228,7 +228,7 @@ public class Packet {
 		byte[] controlBytes = shortToBytes(control);
 		byte[] destAddrBytes = shortToBytes((short) destAddr);
 		byte[] srcAddrBytes = shortToBytes((short) srcAddr);
-		byte[] chksumBytes = intToBytes(chksum);       
+		byte[] chksumBytes = intToBytes(chksum);   
 		
 		// Fill Packet with Component Arrays
 		place(packet, controlBytes, 0, 2);	  // Put control bytes into first two bytes of packet
