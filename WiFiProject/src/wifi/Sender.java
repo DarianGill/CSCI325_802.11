@@ -46,11 +46,14 @@ public class Sender implements Runnable {
 						e.printStackTrace();
 					}	
 				}
+				break;
 			case 1:	//has packet and waited DIFS, check if idle and if idle when started
 			//just to see the format
 				if(!used) {
 					if(!this.theRF.inUse()) {	//not used before or after
 						this.theRF.transmit(packToSend.getPacket());
+						theState = 0;
+						System.out.println("Whispered some secrets.");
 					}
 				}
 			case 2:
