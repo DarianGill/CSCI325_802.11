@@ -13,7 +13,7 @@ public class Sender implements Runnable {
 	private Packet packToSend;
 	
 	enum Cases{
-		WAITING, HASDATA
+		WAITING, HASDATA		//add more cases here as we get there
 	}
 	
 	
