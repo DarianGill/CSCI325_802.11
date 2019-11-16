@@ -17,7 +17,8 @@ public class Receiver implements Runnable {
 	private short id;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
-	private PriorityQueue<byte[]> dataArray;
+	private PriorityQueue<byte[]> dataQ;
+	private ArrayBlockingQueue<Transmission> trans;
 	
 	
 	/**
@@ -25,10 +26,11 @@ public class Receiver implements Runnable {
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks) {
+	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans) {
 		this.id = id;
 		this.rf = rf;
 		this.acks = acks;
+		this.trans = trans;
 	}
 
 	
@@ -43,22 +45,27 @@ public class Receiver implements Runnable {
 	 */
 	@Override
 	public void run() {
+		System.out.println("Receiver " + id + " is initialized. Tell me your secrets!");
+		
 		while(true) {
-			System.out.println("Receiver " + id + " is initialized. Tell me your secrets!");
 			try {
-				byte[] incoming = rf.receive();  
+				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming); 
-				
+				System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
+
 				// check the frame type
-				if (newPacket.getType().equals("Data")) {  //if its data, add packet to Packets ABQ
-					dataArray.add(extractData(newPacket));
+				if (newPacket.getType().equals("Data")) {  //if it's data, extract data and store in dataQ
+					System.out.println("Your secret is safe with me.");
+					Transmission newTrans = new Transmission(newPacket.getSrcAddr(), id, newPacket.getData());
+					trans.add(newTrans);
 				}
 				else if (newPacket.getType().equals("ACK")) {  //if its an ack, add to Acks ABQ
 					acks.add(newPacket);
+					System.out.println("Acknowledgment received.");
 				}
 			}
 			catch(Exception ex) {
-				System.err.println("There was an issue receiving the packet.");
+				ex.printStackTrace();
 			}
 		}
 	}

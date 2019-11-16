@@ -35,7 +35,7 @@ public class Sender implements Runnable {
 		//eventually send the data
 		int difs = RF.aSIFSTime + (2*RF.aSlotTime);
 		boolean used = true;
-		
+
 		//some kind of looping mechanism here??
 		while(true) {
 			switch(theState) {	//the state is an integer corresponding to the case to enter
@@ -60,21 +60,13 @@ public class Sender implements Runnable {
 						this.theRF.transmit(packToSend.getPacket());
 						theState = WAITING;
 						//System.out.println("Sent some stuff");
-					}
-				}
-			case 2:
-				//eventually peek at the acks to see if there is an ack for me!
-			}
 			try {
 				Thread.sleep(RF.aSIFSTime);			//wait sifs after each loop so we're not busy waiting
-			} catch (InterruptedException e) {
+			} 
+			catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
 
-		//take packet from send() and go through waiting stuff, send! and ack recieval
 
-	}
-
-}
