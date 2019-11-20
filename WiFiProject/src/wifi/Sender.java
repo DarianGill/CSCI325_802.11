@@ -6,29 +6,28 @@ import rf.RF;
 
 public class Sender implements Runnable {
 
-	
-	private Integer theState;
+
+	private State theState;
 	private RF theRF;
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
 	private HashMap<Short, Integer> seqs;
 	private Packet packToSend;
-	
-	enum Cases{
+
+	enum State{
 		WAITING, HASDATA		//add more cases here as we get there
 	}
-	
-	
+
 	//take in a queue and manipulate that queue in the send method, will that hold for this to pull from??
-	public Sender(RF theRF, ArrayBlockingQueue<Packet> packets, ArrayBlockingQueue<Packet> acks, HashMap<Short, Integer> seqs) {///take in RF so it can send, a queue that will be manipulated w/ data, what else?
+	public Sender(RF theRF, ArrayBlockingQueue<Packet> packets, ArrayBlockingQueue<Packet> acks) {///take in RF so it can send, a queue that will be manipulated w/ data, what else?
 		this.packets = packets;
 		this.acks = acks;
 		this.theRF = theRF;
-		this.theState = WAITING;
-		this.seqs = seqs;
+		this.theState = State.WAITING;
+		this.seqs = new  HashMap<>();
 	}
-	
-	
+
+
 	@Override
 	public void run() {
 		// TODO Auto-generated method stub
@@ -42,35 +41,43 @@ public class Sender implements Runnable {
 		//some kind of looping mechanism here??
 		while(true) {
 			try {
-			switch(theState) {	//the state is an integer corresponding to the case to enter
-			case WAITING:
-				//waiting for packet
-				if(packets.peek() != null) {	//need to see if channel is busy right here to see if sending after difs
-					used = this.theRF.inUse();	//see if channel is busy at get data
-					packToSend = packets.poll();
-					theState = HASDATA;
-					try {
-						Thread.sleep(difs);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}	
+				switch(theState) {	//the state is an integer corresponding to the case to enter
+				case WAITING:
+					//waiting for packet
+					if(packets.peek() != null) {	//need to see if channel is busy right here to see if sending after difs
+						used = this.theRF.inUse();	//see if channel is busy at get data
+						packToSend = packets.poll();
+						theState = State.HASDATA;
+						try {
+							Thread.sleep(difs);
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}	
+					}
+					break;
+				case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
+					//just to see the format
+					if(!used) {
+						if(!this.theRF.inUse()) {	//not used before or after
+							this.theRF.transmit(packToSend.getPacket());
+							theState = State.WAITING;
+							//System.out.println("Sent some stuff");
+							try {
+								Thread.sleep(RF.aSIFSTime);			//wait sifs after each loop so we're not busy waiting
+							} 
+							catch (InterruptedException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+						}
+					}
 				}
-				break;
-			case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
-				//just to see the format
-				if(!used) {
-					if(!this.theRF.inUse()) {	//not used before or after
-						this.theRF.transmit(packToSend.getPacket());
-						theState = WAITING;
-						//System.out.println("Sent some stuff");
-			try {
-				Thread.sleep(RF.aSIFSTime);			//wait sifs after each loop so we're not busy waiting
-			} 
-			catch (InterruptedException e) {
-				// TODO Auto-generated catch block
+			}
+			catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
-
+	}
+}
 

@@ -26,12 +26,12 @@ public class Receiver implements Runnable {
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, HashMap<Short, Integer> seqs) {
+	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans) {
 		this.id = id;
 		this.rf = rf;
 		this.acks = acks;
 		this.trans = trans;
-		this.seqs = seqs;
+		this.seqs = new  HashMap<>();
 	}
 
 	
