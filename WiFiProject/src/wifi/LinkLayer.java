@@ -3,6 +3,8 @@ import java.io.PrintWriter;
 
 import rf.RF;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.HashMap;
+
 /**
  * Use this layer as a starting point for your project code.  See {@link Dot11Interface} for more
  * details on these routines.
@@ -16,7 +18,8 @@ public class LinkLayer implements Dot11Interface
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
 	private ArrayBlockingQueue<Transmission> trans;
-
+	private HashMap<Short, Integer> seqs;
+	
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
 	 * be written.
@@ -30,12 +33,12 @@ public class LinkLayer implements Dot11Interface
 		this.packets = new ArrayBlockingQueue(10);
 		this.acks = new ArrayBlockingQueue(10);
 		this.trans = new ArrayBlockingQueue<Transmission>(10);
+		this.seqs = new  HashMap<>();
 		
-		
-		Receiver rec = new Receiver(theRF, ourMAC, acks, trans);
+		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, seqs);
 		new Thread(rec).start();
 		
-		Sender send = new Sender(theRF, this.packets, this.acks);
+		Sender send = new Sender(theRF, this.packets, this.acks, seqs);
 		new Thread(send).start();
 		
 		

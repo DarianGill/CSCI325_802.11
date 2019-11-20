@@ -19,18 +19,19 @@ public class Receiver implements Runnable {
 	private ArrayBlockingQueue<Packet> acks;
 	private PriorityQueue<byte[]> dataQ;
 	private ArrayBlockingQueue<Transmission> trans;
-	
+	private HashMap<Short, Integer> seqs;
 	
 	/**
 	 * Constructor for the Receiver object.
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans) {
+	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, HashMap<Short, Integer> seqs) {
 		this.id = id;
 		this.rf = rf;
 		this.acks = acks;
 		this.trans = trans;
+		this.seqs = seqs;
 	}
 
 	

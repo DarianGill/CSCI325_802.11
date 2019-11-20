@@ -1,4 +1,5 @@
 package wifi;
+import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import rf.RF;
 
@@ -10,14 +11,16 @@ public class Sender implements Runnable {
 	private RF theRF;
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
+	private HashMap<Short, Integer> seqs;
 	private Packet packToSend;
 	
 	//take in a queue and manipulate that queue in the send method, will that hold for this to pull from??
-	public Sender(RF theRF, ArrayBlockingQueue<Packet> packets, ArrayBlockingQueue<Packet> acks) {///take in RF so it can send, a queue that will be manipulated w/ data, what else?
+	public Sender(RF theRF, ArrayBlockingQueue<Packet> packets, ArrayBlockingQueue<Packet> acks, HashMap<Short, Integer> seqs) {///take in RF so it can send, a queue that will be manipulated w/ data, what else?
 		this.packets = packets;
 		this.acks = acks;
 		this.theRF = theRF;
 		this.theState = 0;
+		this.seqs = seqs;
 	}
 	
 	@Override
@@ -52,6 +55,7 @@ public class Sender implements Runnable {
 					//just to see the format
 					if(!used) {
 						if(!this.theRF.inUse()) {	//not used before or after
+							//Increment sequence number?
 							this.theRF.transmit(packToSend.getPacket());
 							theState = 0;
 							System.out.println("Whispered a secret");
