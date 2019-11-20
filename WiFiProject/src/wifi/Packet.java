@@ -1,7 +1,7 @@
 package wifi;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.zip.CRC32;  // Should help with checksum calculations
+import java.util.zip.CRC32; 
 
 /**
  * The Packet class creates 802.11 packets using bitwise operations, byte arrays, and 
@@ -47,7 +47,7 @@ public class Packet {
 	private int len;	    // The length of the packet
 
 	// Main Method (ONLY FOR TESTING)
-	/**public static void main(String[] args) {
+	public static void main(String[] args) {
 		
 		// Here is some test data
 		byte[] test = {1,2,3,4,5,6,7,8,9,10};
@@ -61,8 +61,10 @@ public class Packet {
 		Packet b = new Packet(p.getPacket());
 		System.out.println(b.toString());
 		
+		Packet c = new Packet(p.getPacket());
+		System.out.println(c.toString());
 		// I haven't found any bugs yet...
-	}**/
+	}
 
 ///////////////////////////  Constructors  //////////////////////////////////////////////////////////////////////
 // There are 2 constructors for the packet class. The first one is designed to be used //////////////////////////
@@ -85,7 +87,7 @@ public class Packet {
 		this.destAddr = destAddr;
 		this.srcAddr = srcAddr;
 		this.data = data;
-		this.chksum = -1; // Still unsure how to implement checksum
+		this.chksum = -1;		// Not calculated until you call getPacket()
 		this.len = len;
 	}
 
@@ -227,20 +229,20 @@ public class Packet {
 		short control = calcControl(type, resend, seq);
 		byte[] controlBytes = shortToBytes(control);
 		byte[] destAddrBytes = shortToBytes((short) destAddr);
-		byte[] srcAddrBytes = shortToBytes((short) srcAddr);
-		byte[] chksumBytes = intToBytes(chksum);   
+		byte[] srcAddrBytes = shortToBytes((short) srcAddr); 
 		
 		// Fill Packet with Component Arrays
 		place(packet, controlBytes, 0, 2);	  // Put control bytes into first two bytes of packet
 		place(packet, destAddrBytes, 2, 2);   // Put destination address in bytes 2 & 3
 		place(packet, srcAddrBytes, 4, 2);    // Put source address in bytes 4 and 5
 		place(packet, data, 6, dataLen);  	  // Put data in bytes 6-?
-		place(packet, chksumBytes, (6+dataLen), 4); // Put checksum in last 4 bytes of packet
 
-//		// Calculate Checksum 		I DON'T KNOW IF THIS IS WHERE TO CALCULATE THE CHECKSUM	
-//			CRC32 c = new CRC32();
-//			c.update(packet);
-//			chksum = (int) c.getValue();
+		// Calculate Checksum and Add to End of Packet 		
+		CRC32 c = new CRC32();
+		c.update(packet, 0, (6+dataLen));	  // Calculates checksum from control, addresses, and data
+		this.chksum = (int) c.getValue();		  
+		byte[] chksumBytes = intToBytes(this.chksum); 
+		place(packet, chksumBytes, (6+dataLen), 4); // Put checksum in last 4 bytes of packet
 
 		return packet;
 	}
@@ -437,7 +439,7 @@ public class Packet {
 					 "\nDestAddr: "+destAddr+
 					 "\nSrcAddr: "+srcAddr+
 					 "\nData: "+data.length+" bytes "+
-					 "\nChksum: "+chksum+"\n[ ";
+					 "\nChksum: "+(chksum)+"\n[ ";
 		byte[] packet = getPacket();
 		for (int i = 0; i < len; i++) {
 			str += (packet[i] & 0xFF) + " ";
