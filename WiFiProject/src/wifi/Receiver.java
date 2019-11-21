@@ -1,6 +1,9 @@
 package wifi;
 import java.util.concurrent.ArrayBlockingQueue;
 import rf.RF;
+import wifi.Sender.State;
+
+import java.net.InetAddress;
 import java.util.*;
 
 /**
@@ -14,7 +17,10 @@ import java.util.*;
  */
 public class Receiver implements Runnable {
 	
-	private short id;
+	private static final boolean DEBUG = true;
+	private static final short BCAST = -1;  // need to find the actual value for the broadcast address
+	
+	private short ourMAC;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
 	private PriorityQueue<byte[]> dataQ;
@@ -26,8 +32,8 @@ public class Receiver implements Runnable {
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short id, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans) {
-		this.id = id;
+	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans) {
+		this.ourMAC = ourMAC;
 		this.rf = rf;
 		this.acks = acks;
 		this.trans = trans;
@@ -46,23 +52,31 @@ public class Receiver implements Runnable {
 	 */
 	@Override
 	public void run() {
-		System.out.println("Receiver " + id + " is initialized. Tell me your secrets!");
-		
+		if (DEBUG) System.out.println("Receiver " + ourMAC + " is initialized. Tell me your secrets!");
+
 		while(true) {
 			try {
 				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming); 
-				System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
+				if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
 
-				// check the frame type
-				if (newPacket.getType().equals("Data")) {  //if it's data, extract data and store in dataQ
-					System.out.println("Your secret is safe with me.");
-					Transmission newTrans = new Transmission(newPacket.getSrcAddr(), id, newPacket.getData());
+				//check if it's data and the destAddr is ourMAC or Broadcast
+				if (newPacket.getType().equals("Data") && (newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {  
+					sendAck(newPacket);	// send the ACK
+					Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 					trans.add(newTrans);
+					if (DEBUG) System.out.println("Your secret is safe with me.");
 				}
-				else if (newPacket.getType().equals("ACK")) {  //if its an ack, add to Acks ABQ
+				
+				//if its an ack and the destAddr is ourMAC, add to acks ABQ
+				else if (newPacket.getType().equals("ACK")  && newPacket.getDestAddr() == ourMAC) { 
 					acks.add(newPacket);
-					System.out.println("Acknowledgment received.");
+					seqs.put(newPacket.getSrcAddr(), (int)calcSeq(incoming));
+					if (DEBUG) System.out.println("Acknowledgment received.");
+				}
+				
+				else {
+					if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
 				}
 			}
 			catch(Exception ex) {
@@ -71,15 +85,51 @@ public class Receiver implements Runnable {
 		}
 	}
 	
+	
+	public void sendAck(Packet ack) {
+		if(!rf.inUse()) {	
+			try {
+				// set frame type to ACK
+				ack.setType("ACK");
+				
+				// swap destAddr and srcAddr
+				short temp = ack.getDestAddr();
+				ack.setDestAddr(ack.getSrcAddr());
+				ack.setSrcAddr(temp);
+				
+				// wait SIFS then send ack
+				Thread.sleep(RF.aSIFSTime);
+				rf.transmit(ack.getPacket());
+				
+				if (DEBUG) System.out.println("Sent ack to" + ack.getDestAddr());
+			} 
+			catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
 	/**
-	 * Takes a transmitted packet and extracts the data from it.
-	 * 
-	 * @param pack	the packet containing the needed data
-	 * @return		the data pulled from the packet, stored as a byte array
+	 * The calcSeq method calculates the short sequence value of a packet given its
+	 * byte array representation
 	 */
-	public static byte[] extractData(Packet pack) {
-		byte[] data = pack.getData();
-		return data;
+	private short calcSeq(byte[] p) {
+		short ctrl = bytesToShort(p, 0, 1);
+		ctrl = (short) (ctrl & 0xFFF);
+		return ctrl;
 	}
 	
+	/**
+	 * The bytesToShort method takes two bytes (i and j) from an array and converts them 
+	 * into a short.
+	 * 
+	 * @param b     - a byte array
+	 * @param i		- the byte for the top 8 bits of the short
+	 * @param j		- the byte for the bottom 8 bits of the short
+	 * @return shrt - a 16-bit short
+	 */
+	private short bytesToShort(byte[] b, int i, int j) {
+		short shrt = (short) ((b[i]) & 0xFF); 			
+		shrt = (short) ((shrt << 8) | ((b[j]) & 0xFF));
+		return shrt;
+	}
 }
