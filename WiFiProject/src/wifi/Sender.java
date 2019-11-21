@@ -2,6 +2,7 @@ package wifi;
 import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import rf.RF;
+import java.util.Random;
 
 
 public class Sender implements Runnable {
@@ -13,6 +14,7 @@ public class Sender implements Runnable {
 	private ArrayBlockingQueue<Packet> acks;
 	private HashMap<Short, Integer> seqs;
 	private Packet packToSend;
+	private Random rand;
 
 	enum State{
 		WAITING, HASDATA		//add more cases here as we get there
@@ -25,8 +27,21 @@ public class Sender implements Runnable {
 		this.theRF = theRF;
 		this.theState = State.WAITING;
 		this.seqs = new  HashMap<>();
+		rand = new Random();
 	}
 
+	private int setWaitTime(int resends) {
+		int expand = RF.aCWMin;
+		//need aCWMin < something*slotTime < aCWMax
+		int multiplier = (resends*2)+1;
+		expand += mulitplier*RF.aSlotTime
+		if(expand>RF.aCWMax) {
+			expand = RF.aCWMax;
+		}
+		
+		return rand.nextInt(expand);
+	}
+	
 
 	@Override
 	public void run() {
@@ -47,7 +62,9 @@ public class Sender implements Runnable {
 					if(packets.peek() != null) {	//need to see if channel is busy right here to see if sending after difs
 						used = this.theRF.inUse();	//see if channel is busy at get data
 						packToSend = packets.poll();
-						theState = State.HASDATA;
+						
+						theState = State.HASDATA;		//channel not busy when we first looked
+						
 						try {
 							Thread.sleep(difs);
 						} catch (InterruptedException e) {
@@ -58,25 +75,24 @@ public class Sender implements Runnable {
 					break;
 				case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
 					//just to see the format
-					if(!used) {
-						if(!this.theRF.inUse()) {	//not used before or after
-							this.theRF.transmit(packToSend.getPacket());
-							theState = State.WAITING;
-							//System.out.println("Sent some stuff");
-							try {
-								Thread.sleep(RF.aSIFSTime);			//wait sifs after each loop so we're not busy waiting
-							} 
-							catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
-						}
+					if(used||this.theRF.inUse()) {
+						//do some exponential backoff type stuff
+					}else {
+						this.theRF.transmit(packToSend.getPacket());
+						theState = State.WAITING;
 					}
 				}
 			}
 			catch (Exception e) {
 				e.printStackTrace();
 			}
+		}
+		try {
+			Thread.sleep(20);			//wait sifs after each loop so we're not busy waiting
+		} 
+		catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 	}
 }
