@@ -105,7 +105,7 @@ public class Sender implements Runnable {
 						numWaitSlots = setWaitTime(resets);
 					}else {
 						this.theRF.transmit(packToSend.getPacket());//end if its idle after all our waiting
-						timeoutAt = RF.clock()+				//how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+						timeoutAt = RF.clock()+	RF.aSIFSTime + RF.aSlotTime + difs;			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
 						theState = State.ACKWAIT;
 					}
 					//what to do if we waited backoff and still busy, GO BACK TO THE BEGINNNING WAIT DIFS ONLY AND TRY IT
