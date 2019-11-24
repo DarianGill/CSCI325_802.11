@@ -17,7 +17,7 @@ public class Sender implements Runnable {
 	private Random rand;
 
 	enum State{
-		WAITING, HASDATA, BACKOFF, ACKWAIT, RESEND		//add more cases here as we get there
+		WAITING, HASDATA, BACKOFF, ACKWAIT		//add more cases here as we get there
 	}
 
 	//take in a queue and manipulate that queue in the send method, will that hold for this to pull from??
@@ -108,6 +108,7 @@ public class Sender implements Runnable {
 						timeoutAt = RF.clock()+	RF.aSIFSTime + RF.aSlotTime + difs;			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
 						theState = State.ACKWAIT;
 					}
+					break;
 					//what to do if we waited backoff and still busy, GO BACK TO THE BEGINNNING WAIT DIFS ONLY AND TRY IT
 					//check if its empty while waiting backoff??		//should implement pausing and count down slot by slot (have method for this)
 				case ACKWAIT://see if we get an ack back for what we finally sent, if we don't then we need to increase exp backoff
@@ -128,6 +129,7 @@ public class Sender implements Runnable {
 					}else {	//cool we got acked for the thing we wanted to 
 						theState = State.WAITING;
 					}
+					break;
 					//resets++; //if we don't get an ack back in the timeout time
 					//}
 					
