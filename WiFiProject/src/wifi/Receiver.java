@@ -1,9 +1,6 @@
 package wifi;
 import java.util.concurrent.ArrayBlockingQueue;
 import rf.RF;
-import wifi.Sender.State;
-
-import java.net.InetAddress;
 import java.util.*;
 
 /**
@@ -16,17 +13,16 @@ import java.util.*;
  *
  */
 public class Receiver implements Runnable {
-	
+
 	private static final boolean DEBUG = true;
-	private static final short BCAST = -1;  // need to find the actual value for the broadcast address
-	
+	private static final short BCAST = -1;
+
 	private short ourMAC;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
-	private PriorityQueue<byte[]> dataQ;
 	private ArrayBlockingQueue<Transmission> trans;
-	private HashMap<Short, Integer> seqs;
-	
+	private HashMap<Short, Short> seqs;
+
 	/**
 	 * Constructor for the Receiver object.
 	 * @param id	this is the "MAC address"
@@ -40,7 +36,7 @@ public class Receiver implements Runnable {
 		this.seqs = new  HashMap<>();
 	}
 
-	
+
 	/**
 	 * Checks the RF layer to see if there is any data waiting to be received. Since the RF layer
 	 * stores packets as byte arrays, this method will convert the byte array into a Packet object
@@ -62,21 +58,47 @@ public class Receiver implements Runnable {
 
 				//check if it's data and the destAddr is ourMAC or Broadcast
 				if (newPacket.getType().equals("Data") && (newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {  
-					sendAck(newPacket);	// send the ACK
-					Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
-					trans.add(newTrans);
-					if (DEBUG) System.out.println("Your secret is safe with me.");
-				}
-				
-				//if its an ack and the destAddr is ourMAC, add to acks ABQ
-				else if (newPacket.getType().equals("ACK")  && newPacket.getDestAddr() == ourMAC) { 
-					acks.add(newPacket);
-					seqs.put(newPacket.getSrcAddr(), (int)calcSeq(incoming));
-					if (DEBUG) System.out.println("Acknowledgment received.");
-				}
-				
-				else {
-					if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
+
+					// only send ack if the packet was sent to ourMAC specifically
+					if (newPacket.getDestAddr() == ourMAC) {
+						sendAck(newPacket);
+					}
+
+					// add sender MAC to seqs if it's not already in there
+					if (!seqs.containsKey(newPacket.getSrcAddr())) {
+						seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
+					}
+
+					// if incoming seq is +1 from stored(last) one
+					else if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq() - 1) {	
+						Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+						trans.add(newTrans);
+						seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+						if (DEBUG) System.out.println("Your secret is safe with me.");
+					}
+					// *** TODO ***
+					// if incoming seq is NOT +1 from stored(last) one
+					else if (seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {	
+						System.out.print("Packet received out of order");
+						Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+						trans.add(newTrans);
+						seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+						if (DEBUG) System.out.println("Your secret is safe with me.");
+					}
+
+					//if its an ack and the destAddr is ourMAC, add to acks ABQ
+					else if (newPacket.getType().equals("ACK")  && newPacket.getDestAddr() == ourMAC) { 
+						if (!acks.isEmpty() && seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
+							System.out.print("Packet received out of order");
+						}
+						acks.add(newPacket);
+						if (DEBUG) System.out.println("Acknowledgment received.");
+					}
+
+					// packet not addressed to ourMAC
+					else {
+						if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
+					}
 				}
 			}
 			catch(Exception ex) {
@@ -84,52 +106,29 @@ public class Receiver implements Runnable {
 			}
 		}
 	}
-	
-	
+
+
 	public void sendAck(Packet ack) {
 		if(!rf.inUse()) {	
 			try {
 				// set frame type to ACK
 				ack.setType("ACK");
-				
+
 				// swap destAddr and srcAddr
 				short temp = ack.getDestAddr();
 				ack.setDestAddr(ack.getSrcAddr());
 				ack.setSrcAddr(temp);
-				
+
 				// wait SIFS then send ack
 				Thread.sleep(RF.aSIFSTime);
 				rf.transmit(ack.getPacket());
-				
-				if (DEBUG) System.out.println("Sent ack to" + ack.getDestAddr());
+
+				if (DEBUG) System.out.println("Sent ack to " + ack.getDestAddr());
 			} 
 			catch (InterruptedException e) {
 				e.printStackTrace();
 			}
 		}
 	}
-	/**
-	 * The calcSeq method calculates the short sequence value of a packet given its
-	 * byte array representation
-	 */
-	private short calcSeq(byte[] p) {
-		short ctrl = bytesToShort(p, 0, 1);
-		ctrl = (short) (ctrl & 0xFFF);
-		return ctrl;
-	}
-	
-	/**
-	 * The bytesToShort method takes two bytes (i and j) from an array and converts them 
-	 * into a short.
-	 * 
-	 * @param b     - a byte array
-	 * @param i		- the byte for the top 8 bits of the short
-	 * @param j		- the byte for the bottom 8 bits of the short
-	 * @return shrt - a 16-bit short
-	 */
-	private short bytesToShort(byte[] b, int i, int j) {
-		short shrt = (short) ((b[i]) & 0xFF); 			
-		shrt = (short) ((shrt << 8) | ((b[j]) & 0xFF));
-		return shrt;
-	}
 }
+

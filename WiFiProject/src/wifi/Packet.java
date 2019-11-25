@@ -155,6 +155,20 @@ public class Packet {
 	}
 	
 	/**
+	 * The getSeq method returns the sequence number of the packet.
+	 */
+	public short getSeq() {
+		return seq;
+	}
+	
+	/**
+	 * The setSeq method sets the sequence number of the packet to the provided short.
+	 */
+	public void setSeq(short s) {
+		seq = s;
+	}
+	
+	/**
 	 * The getDestADDr method returns the destination address of the packet.
 	 */
 	public short getDestAddr() {
