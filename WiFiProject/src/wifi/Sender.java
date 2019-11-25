@@ -12,7 +12,7 @@ public class Sender implements Runnable {
 	private RF theRF;
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
-	private HashMap<Short, Integer> seqs;
+	private HashMap<Short, Short> seqs;
 	private Packet packToSend;
 	private Random rand;
 	private boolean DEBUG;
@@ -69,6 +69,17 @@ public class Sender implements Runnable {
 						used = this.theRF.inUse();	//see if channel is busy at get data
 						packToSend = packets.poll();
 
+						//Check Seq Num
+						//if dest already used, update seq num to what is in hashmap + 1 and update hashmap
+						if (seqs.containsKey(packToSend.getDestAddr())) {
+							packToSend.setChksum(seqs.get(packToSend.getDestAddr())+1);
+							seqs.replace(packToSend.getDestAddr(), (short) (seqs.get(packToSend.getDestAddr())+1)); //Wrap Around?
+						}
+						//else put new dest addr into hashmap and pair with default seq num (0)
+						else {
+							seqs.put(packToSend.getDestAddr(), packToSend.getSeq());
+						}
+
 						theState = State.HASDATA;		//used has been set to see if we were busy when first tried
 						if(DEBUG) System.out.println("Got a packet to send...");
 						try {
@@ -76,7 +87,7 @@ public class Sender implements Runnable {
 						} catch (InterruptedException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
-						}	
+						}
 					}
 					break;
 				case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
@@ -89,7 +100,7 @@ public class Sender implements Runnable {
 					}else {
 						if(DEBUG) System.out.println("Gonna send, fingers crossed...");
 						this.theRF.transmit(packToSend.getPacket());
-						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + difs);
+						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
 						theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
 					}
 					break;
@@ -112,7 +123,7 @@ public class Sender implements Runnable {
 						if(DEBUG) System.out.println("Jeez its busy I'll cut my window down");
 					}else {
 						this.theRF.transmit(packToSend.getPacket());//end if its idle after all our waiting
-						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + difs);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
 						theState = State.ACKWAIT;
 						if(DEBUG) System.out.println("Sending, wish me luck");
 					}
@@ -136,7 +147,7 @@ public class Sender implements Runnable {
 						//if we have then numWaitSlots = setWaitTime(resets+1) and go to BACKOFF
 						//is there a max number of retries??
 
-					}else {	//cool we got acked for the thing we wanted to 
+					}else {	//cool we got acked for the thing we wanted to
 						if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
 							acks.take();
 							theState = State.WAITING;
@@ -153,7 +164,7 @@ public class Sender implements Runnable {
 								}
 							}
 						}
-						
+
 					}
 					break;
 					//resets++; //if we don't get an ack back in the timeout time
@@ -169,7 +180,7 @@ public class Sender implements Runnable {
 
 			try {
 				Thread.sleep(20);			//wait some after each loop so we're not busy waiting
-			} 
+			}
 			catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -177,4 +188,3 @@ public class Sender implements Runnable {
 		}
 	}
 }
-
