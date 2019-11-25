@@ -33,7 +33,7 @@ public class LinkLayer implements Dot11Interface
 		this.acks = new ArrayBlockingQueue(10);
 		this.trans = new ArrayBlockingQueue<Transmission>(10);
 		
-		Receiver rec = new Receiver(theRF, ourMAC, acks, trans);
+		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output);
 		new Thread(rec).start();
 		
 		Sender send = new Sender(theRF, this.packets, this.acks);
