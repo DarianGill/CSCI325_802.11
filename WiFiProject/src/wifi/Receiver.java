@@ -2,6 +2,7 @@ package wifi;
 import java.util.concurrent.ArrayBlockingQueue;
 import rf.RF;
 import java.util.*;
+import java.io.PrintWriter;
 
 /**
  * Receiver will monitor the network for incoming data, which it will remove from it's packet and store in
@@ -17,23 +18,31 @@ public class Receiver implements Runnable {
 	private static final boolean DEBUG = true;
 	private static final short BCAST = -1;
 
+	private PrintWriter output;
+	private State theState;
 	private short ourMAC;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
 	private ArrayBlockingQueue<Transmission> trans;
 	private HashMap<Short, Short> seqs;
 
+	enum State {
+		DATA, ACK
+	}
+
 	/**
 	 * Constructor for the Receiver object.
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans) {
+	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output) {
 		this.ourMAC = ourMAC;
 		this.rf = rf;
 		this.acks = acks;
 		this.trans = trans;
 		this.seqs = new  HashMap<>();
+		this.theState = State.DATA;
+		this.output = output;
 	}
 
 
@@ -54,43 +63,55 @@ public class Receiver implements Runnable {
 			try {
 				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming);
-				if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
-
-				//check if it's data and the destAddr is ourMAC or Broadcast
-				if (newPacket.getType().equals("Data") && (newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {
-
-					// only send ack if the packet was sent to ourMAC specifically
-					if (newPacket.getDestAddr() == ourMAC) {
-						sendAck(newPacket);
+				
+				switch(theState) {
+				case DATA: 
+					if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
+					if (newPacket.getType().equals("ACK")) {	 // switch to ACK if it's an ACK packet
+						theState = State.ACK;
 					}
 
-					// add sender MAC to seqs if it's not already in there
-					if (!seqs.containsKey(newPacket.getSrcAddr())) {
-						seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
-					}
-
-					// if incoming seq is +1 from stored(last) one
-					else if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq() - 1) {
+					//check if it's data and the destAddr is ourMAC or Broadcast
+					if ((newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {
+						
+						// store relevant info in the trans queue
 						Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 						trans.add(newTrans);
-						seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
-						if (DEBUG) System.out.println("Your secret is safe with me.");
-					}
-
-					// if incoming seq is NOT +1 from stored(last) one
-					else if (seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
-						System.out.print("Packet received out of order");
-						Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
-						trans.add(newTrans);
-						seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
-						if (DEBUG) System.out.println("Your secret is safe with me.");
-					}
-
-					//if its an ack and the destAddr is ourMAC, add to acks ABQ
-					else if (newPacket.getType().equals("ACK")  && newPacket.getDestAddr() == ourMAC) {
-						if (!acks.isEmpty() && seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
-							System.out.print("Packet received out of order");
+						
+						// only send ack if the packet was sent to ourMAC
+						if (newPacket.getDestAddr() == ourMAC) {	
+							sendAck(newPacket);
 						}
+
+						// add sender MAC to seqs if it's not already in there
+						if (!seqs.containsKey(newPacket.getSrcAddr())) {
+							seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
+						}
+
+						// if incoming seq is +1 from stored(last) one, update seq# for that MAC
+						else if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq() - 1) {
+							seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+							if (DEBUG) System.out.println("Your secret is safe with me.");
+						}
+
+						// if incoming seq is NOT +1 from stored(last) one, print out of order warning
+						// and update the seq # for that MAC
+						else if (seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
+							output.print ("Packet received out of order");
+							seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+							if (DEBUG) System.out.println(", but your secret is still safe with me.");
+						}
+						
+						// packet not addressed to ourMAC
+						else {
+							if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
+						}
+					}
+					break;
+					
+				case ACK:
+					// if addressed to ourMAC
+					if (newPacket.getDestAddr() == ourMAC) {
 						acks.add(newPacket);
 						if (DEBUG) System.out.println("Acknowledgment received.");
 					}
@@ -99,6 +120,8 @@ public class Receiver implements Runnable {
 					else {
 						if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
 					}
+					theState = State.DATA;
+					break;
 				}
 			}
 			catch(Exception ex) {

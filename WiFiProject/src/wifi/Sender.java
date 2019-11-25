@@ -79,7 +79,7 @@ public class Sender implements Runnable {
 						else {
 							seqs.put(packToSend.getDestAddr(), packToSend.getSeq());
 						}
-						
+
 						theState = State.HASDATA;		//used has been set to see if we were busy when first tried
 						if(DEBUG) System.out.println("Got a packet to send...");
 						try {
@@ -87,7 +87,7 @@ public class Sender implements Runnable {
 						} catch (InterruptedException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
-						}	
+						}
 					}
 					break;
 				case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
@@ -147,7 +147,7 @@ public class Sender implements Runnable {
 						//if we have then numWaitSlots = setWaitTime(resets+1) and go to BACKOFF
 						//is there a max number of retries??
 
-					}else {	//cool we got acked for the thing we wanted to 
+					}else {	//cool we got acked for the thing we wanted to
 						if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
 							acks.take();
 							theState = State.WAITING;
@@ -164,7 +164,7 @@ public class Sender implements Runnable {
 								}
 							}
 						}
-						
+
 					}
 					break;
 					//resets++; //if we don't get an ack back in the timeout time
@@ -180,7 +180,7 @@ public class Sender implements Runnable {
 
 			try {
 				Thread.sleep(20);			//wait some after each loop so we're not busy waiting
-			} 
+			}
 			catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -188,4 +188,3 @@ public class Sender implements Runnable {
 		}
 	}
 }
-
