@@ -99,9 +99,15 @@ public class Sender implements Runnable {
 						theState = State.BACKOFF;
 					}else {
 						if(DEBUG) System.out.println("Gonna send, fingers crossed...");
+						if(packToSend.getDestAddr()==-1) {
+							theState = State.WAITING;
+							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
+						}else {
 						this.theRF.transmit(packToSend.getPacket());
 						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
 						theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
+						if(DEBUG) System.out.println("Sending, wish me luck");
+						}
 					}
 					break;
 				case BACKOFF:
@@ -123,8 +129,13 @@ public class Sender implements Runnable {
 						if(DEBUG) System.out.println("Jeez its busy I'll cut my window down");
 					}else {
 						this.theRF.transmit(packToSend.getPacket());//end if its idle after all our waiting
-						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
-						theState = State.ACKWAIT;
+						if(packToSend.getDestAddr()==-1) {
+							theState = State.WAITING;
+							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
+						}else {
+							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+							theState = State.ACKWAIT;
+						}
 						if(DEBUG) System.out.println("Sending, wish me luck");
 					}
 					break;
