@@ -42,7 +42,10 @@ public class Sender implements Runnable {
 		if(max>RF.aCWmax) {
 			max = RF.aCWmax;
 		}
-		return (rand.nextInt(max)/RF.aSlotTime);	//returning number of slots to wait
+		if(max<RF.aCWmin) {
+			max = RF.aCWmin;
+		}
+		return rand.nextInt(max);	//returning number of slots to wait
 	}
 
 
@@ -98,15 +101,15 @@ public class Sender implements Runnable {
 						numWaitSlots = setWaitTime(resets);//for each waitSlot, sleep a slot time
 						theState = State.BACKOFF;
 					}else {
+						this.theRF.transmit(packToSend.getPacket());
 						if(DEBUG) System.out.println("Gonna send, fingers crossed...");
 						if(packToSend.getDestAddr()==-1) {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
-						this.theRF.transmit(packToSend.getPacket());
-						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
-						theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
-						if(DEBUG) System.out.println("Sending, wish me luck");
+							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
+							theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
+							if(DEBUG) System.out.println("Sending, wish me luck");
 						}
 					}
 					break;
@@ -143,7 +146,7 @@ public class Sender implements Runnable {
 					//check if its empty while waiting backoff??		//should implement pausing and count down slot by slot (have method for this)
 				case ACKWAIT://see if we get an ack back for what we finally sent, if we don't then we need to increase exp backoff
 					if(acks.isEmpty() && System.currentTimeMillis()>=timeoutAt){
-						if(resets+1==RF.dot11RetryLimit) {
+						if(resets-1>RF.dot11RetryLimit) {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("We tried too many times, better luck next time");
 						}else {
