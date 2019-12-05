@@ -29,7 +29,7 @@ public class Sender implements Runnable {
 		this.theState = State.WAITING;
 		this.seqs = new  HashMap<>();
 		rand = new Random();
-		DEBUG = true;
+		DEBUG = false;
 	}
 
 
@@ -136,7 +136,7 @@ public class Sender implements Runnable {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
-							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime * 1000000*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
 							theState = State.ACKWAIT;
 						}
 						if(DEBUG) System.out.println("Sending, wish me luck");
