@@ -29,7 +29,7 @@ public class Sender implements Runnable {
 		this.theState = State.WAITING;
 		this.seqs = new  HashMap<>();
 		rand = new Random();
-		DEBUG = true;
+		DEBUG = false;
 	}
 
 
@@ -42,7 +42,10 @@ public class Sender implements Runnable {
 		if(max>RF.aCWmax) {
 			max = RF.aCWmax;
 		}
-		return (rand.nextInt(max)/RF.aSlotTime);	//returning number of slots to wait
+		if(max<RF.aCWmin) {
+			max = RF.aCWmin;
+		}
+		return rand.nextInt(max);	//returning number of slots to wait
 	}
 
 
@@ -79,7 +82,7 @@ public class Sender implements Runnable {
 						else {
 							seqs.put(packToSend.getDestAddr(), packToSend.getSeq());
 						}
-						
+
 						theState = State.HASDATA;		//used has been set to see if we were busy when first tried
 						if(DEBUG) System.out.println("Got a packet to send...");
 						try {
@@ -87,7 +90,7 @@ public class Sender implements Runnable {
 						} catch (InterruptedException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
-						}	
+						}
 					}
 					break;
 				case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
@@ -98,10 +101,16 @@ public class Sender implements Runnable {
 						numWaitSlots = setWaitTime(resets);//for each waitSlot, sleep a slot time
 						theState = State.BACKOFF;
 					}else {
-						if(DEBUG) System.out.println("Gonna send, fingers crossed...");
 						this.theRF.transmit(packToSend.getPacket());
-						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
-						theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
+						if(DEBUG) System.out.println("Gonna send, fingers crossed...");
+						if(packToSend.getDestAddr()==-1) {
+							theState = State.WAITING;
+							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
+						}else {
+							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
+							theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
+							if(DEBUG) System.out.println("Sending, wish me luck");
+						}
 					}
 					break;
 				case BACKOFF:
@@ -123,8 +132,13 @@ public class Sender implements Runnable {
 						if(DEBUG) System.out.println("Jeez its busy I'll cut my window down");
 					}else {
 						this.theRF.transmit(packToSend.getPacket());//end if its idle after all our waiting
-						timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
-						theState = State.ACKWAIT;
+						if(packToSend.getDestAddr()==-1) {
+							theState = State.WAITING;
+							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
+						}else {
+							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime * 1000000*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+							theState = State.ACKWAIT;
+						}
 						if(DEBUG) System.out.println("Sending, wish me luck");
 					}
 					break;
@@ -132,7 +146,7 @@ public class Sender implements Runnable {
 					//check if its empty while waiting backoff??		//should implement pausing and count down slot by slot (have method for this)
 				case ACKWAIT://see if we get an ack back for what we finally sent, if we don't then we need to increase exp backoff
 					if(acks.isEmpty() && System.currentTimeMillis()>=timeoutAt){
-						if(resets+1==RF.dot11RetryLimit) {
+						if(resets-1>RF.dot11RetryLimit) {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("We tried too many times, better luck next time");
 						}else {
@@ -147,7 +161,7 @@ public class Sender implements Runnable {
 						//if we have then numWaitSlots = setWaitTime(resets+1) and go to BACKOFF
 						//is there a max number of retries??
 
-					}else {	//cool we got acked for the thing we wanted to 
+					}else {	//cool we got acked for the thing we wanted to
 						if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
 							acks.take();
 							theState = State.WAITING;
@@ -164,7 +178,7 @@ public class Sender implements Runnable {
 								}
 							}
 						}
-						
+
 					}
 					break;
 					//resets++; //if we don't get an ack back in the timeout time
@@ -180,7 +194,7 @@ public class Sender implements Runnable {
 
 			try {
 				Thread.sleep(20);			//wait some after each loop so we're not busy waiting
-			} 
+			}
 			catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -188,4 +202,3 @@ public class Sender implements Runnable {
 		}
 	}
 }
-
