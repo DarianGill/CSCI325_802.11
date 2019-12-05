@@ -15,7 +15,7 @@ import java.io.PrintWriter;
  */
 public class Receiver implements Runnable {
 
-	private static final boolean DEBUG = false;
+	private static final boolean DEBUG = true;
 	private static final short BCAST = -1;
 
 	private PrintWriter output;
@@ -41,7 +41,7 @@ public class Receiver implements Runnable {
 		this.acks = acks;
 		this.trans = trans;
 		this.seqs = new  HashMap<>();
-		this.theState = State.DATA;
+		this.theState = State.ACK;
 		this.output = output;
 	}
 
@@ -67,50 +67,52 @@ public class Receiver implements Runnable {
 				switch(theState) {
 				case DATA: 
 					if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
-					if (newPacket.getType().equals("ACK")) {	 // switch to ACK if it's an ACK packet
-						theState = State.ACK;
-					}
-					else {
 
-						//check if it's data and the destAddr is ourMAC or Broadcast
-						if ((newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {
+					//check if it's data and the destAddr is ourMAC or Broadcast
+					if ((newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {
 
-							// if MAC not in seqs, add MAC and seq#
-							if (!seqs.containsKey(newPacket.getSrcAddr())) {
-								seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
+						// if MAC not in seqs, add MAC and seq#
+						if (!seqs.containsKey(newPacket.getSrcAddr())) {
+							seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
+							Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+							trans.add(newTrans);
+							if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to HashMap with seq#: " + newPacket.getSeq());
+						}
+
+						// if MAC is in seqs...
+						else {
+							// if we already have this packet from this MAC, do nothing
+							if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
+								if (DEBUG) System.out.println("Already have that data.");
+							}
+							// if this is a new packet, add it to the trans queue and update seqs with new seq# for this MAC
+							else {
+								if ( seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
+									output.print ("Packet received out of order");
+									if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
+								}
+								seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
 								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 								trans.add(newTrans);
-								if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to HashMap with seq#: " + newPacket.getSeq());
-							}
-
-							// if MAC is in seqs...
-							else {
-								// if we already have this packet from this MAC, do nothing
-								if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
-									if (DEBUG) System.out.println("Already have that data.");
-								}
-								// if this is a new packet, add it to the trans queue and update seqs with new seq# for this MAC
-								else {
-									if ( seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
-										output.print ("Packet received out of order");
-										if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
-									}
-									seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
-									Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
-									trans.add(newTrans);
-									if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
-								}
+								if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
 							}
 						}
+
 
 						// only send ACK is packet was sent directly to ourMAC
 						if (newPacket.getDestAddr() == ourMAC) {
 							sendAck(newPacket);
 						}
+						theState = State.ACK;
 					}
 					break;
 					
 				case ACK:
+					if(newPacket.getType().equals("Data")) {
+						theState = State.DATA;
+						break;
+					}
+					
 					// if addressed to ourMAC
 					if (newPacket.getDestAddr() == ourMAC) {
 						acks.add(newPacket);
@@ -121,7 +123,6 @@ public class Receiver implements Runnable {
 					else {
 						if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
 					}
-					theState = State.DATA;
 					break;
 				}
 			}

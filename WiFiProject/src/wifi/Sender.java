@@ -29,7 +29,7 @@ public class Sender implements Runnable {
 		this.theState = State.WAITING;
 		this.seqs = new  HashMap<>();
 		rand = new Random();
-		DEBUG = false;
+		DEBUG = true;
 	}
 
 
@@ -60,7 +60,7 @@ public class Sender implements Runnable {
 		boolean used = true;
 		int resets = 1;
 		int numWaitSlots = 0;
-		int timeoutAt = 0;
+		long timeoutAt = 0;
 
 		//some kind of looping mechanism here??
 		while(true) {
@@ -107,7 +107,8 @@ public class Sender implements Runnable {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
-							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
+							timeoutAt = (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime + 100*RF.aSlotTime);
+							System.out.println("Timeout amount: " + timeoutAt);
 							theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
 							if(DEBUG) System.out.println("Sending, wish me luck");
 						}
@@ -136,7 +137,7 @@ public class Sender implements Runnable {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
-							timeoutAt = (int) (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime * 1000000*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+							timeoutAt = (System.currentTimeMillis()+	RF.aSIFSTime + RF.aSlotTime * 1000000*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
 							theState = State.ACKWAIT;
 						}
 						if(DEBUG) System.out.println("Sending, wish me luck");
@@ -145,6 +146,8 @@ public class Sender implements Runnable {
 					//what to do if we waited backoff and still busy, GO BACK TO THE BEGINNNING WAIT DIFS ONLY AND TRY IT
 					//check if its empty while waiting backoff??		//should implement pausing and count down slot by slot (have method for this)
 				case ACKWAIT://see if we get an ack back for what we finally sent, if we don't then we need to increase exp backoff
+					System.out.println("Timeout amount: " + timeoutAt + "\tSystem time: " + System.currentTimeMillis());
+					System.out.println("Acks size: " + acks.toString());
 					if(acks.isEmpty() && System.currentTimeMillis()>=timeoutAt){
 						if(resets-1>RF.dot11RetryLimit) {
 							theState = State.WAITING;
@@ -162,23 +165,24 @@ public class Sender implements Runnable {
 						//is there a max number of retries??
 
 					}else {	//cool we got acked for the thing we wanted to
-						if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
-							acks.take();
-							theState = State.WAITING;
-							if(DEBUG) System.out.println("YAY we got an ACK, see ya soon");
-						}else {
-							while(!acks.isEmpty()) {
-								if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
-									acks.take();
-									theState = State.WAITING;
-									if(DEBUG) System.out.println("YAY we got an ACK, see ya soon");	//looking for our ack if theres a few in the queue
-									break;
-								}else {
-									acks.take();			//clearing the queue
+						if (!acks.isEmpty()) {
+							if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
+								acks.take();
+								theState = State.WAITING;
+								if(DEBUG) System.out.println("YAY we got an ACK, see ya soon");
+							}else {
+								while(!acks.isEmpty()) {
+									if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
+										acks.take();
+										theState = State.WAITING;
+										if(DEBUG) System.out.println("YAY we got an ACK, see ya soon");	//looking for our ack if theres a few in the queue
+										break;
+									}else {
+										acks.take();			//clearing the queue
+									}
 								}
 							}
 						}
-
 					}
 					break;
 					//resets++; //if we don't get an ack back in the timeout time
