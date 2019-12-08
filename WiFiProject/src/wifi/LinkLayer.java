@@ -8,7 +8,7 @@ import java.util.HashMap;
 /**
  * Use this layer as a starting point for your project code.  See {@link Dot11Interface} for more
  * details on these routines.
- * @author richards
+ * @author richards, Darian Gill, Josh McMillan, Kyle Muir
  */
 public class LinkLayer implements Dot11Interface 
 {
@@ -18,6 +18,8 @@ public class LinkLayer implements Dot11Interface
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
 	private ArrayBlockingQueue<Transmission> trans;
+	private Integer stat;
+	private int[] control;
 	
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
@@ -32,11 +34,13 @@ public class LinkLayer implements Dot11Interface
 		this.packets = new ArrayBlockingQueue(10);
 		this.acks = new ArrayBlockingQueue(10);
 		this.trans = new ArrayBlockingQueue<Transmission>(10);
+		this.stat = 0;
+		this.control = new int[4];
 		
-		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output);
+		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output, control);
 		new Thread(rec).start();
 		
-		Sender send = new Sender(theRF, this.packets, this.acks);
+		Sender send = new Sender(theRF, this.packets, this.acks, output, control);
 		new Thread(send).start();
 		
 		
@@ -48,10 +52,16 @@ public class LinkLayer implements Dot11Interface
 	 * of bytes to send.  See docs for full description.
 	 */
 	public int send(short dest, byte[] data, int len) {
-		output.println("LinkLayer: Sending "+len+" bytes to "+dest);
-		Packet packet = new Packet("Data", false, (short)0, dest, this.ourMAC, data, len + 10); //adding 10 to len here is to make the length of the full packet vs. just the data length
-		packets.add(packet);
-		return len;
+		if (packets.size() >= 4) {
+			stat = 10;
+			return 0;
+		}
+		else {
+			output.println("LinkLayer: Sending "+len+" bytes to "+dest);
+			Packet packet = new Packet("Data", false, (short)0, dest, this.ourMAC, data, len + 10); //adding 10 to len here is to make the length of the full packet vs. just the data length
+			packets.add(packet);
+			return len;
+		}
 	}
 
 	/**
@@ -59,16 +69,21 @@ public class LinkLayer implements Dot11Interface
 	 * the Transmission object.  See docs for full description.
 	 */
 	public int recv(Transmission t) {
-		//output.println("LinkLayer: Pretending to block on recv()");
 		int numBytes;
-		while(true) {
-			if (trans.peek() != null) {
-				Transmission temp = trans.poll();
-				t.setBuf(temp.getBuf());
-				t.setDestAddr(temp.getDestAddr());
-				t.setSourceAddr(temp.getSourceAddr());
-				numBytes = t.getBuf().length;
-				break;
+		if (trans.size() >= 4) {
+			stat = 10;
+			return 0;
+		}
+		else {
+			while(true) {
+				if (trans.peek() != null) {
+					Transmission temp = trans.poll();
+					t.setBuf(temp.getBuf());
+					t.setDestAddr(temp.getDestAddr());
+					t.setSourceAddr(temp.getSourceAddr());
+					numBytes = t.getBuf().length;
+					break;
+				}
 			}
 		}
 		return numBytes;
@@ -78,16 +93,20 @@ public class LinkLayer implements Dot11Interface
 	 * Returns a current status code.  See docs for full description.
 	 */
 	public int status() {
-		output.println("LinkLayer: Faking a status() return value of 0");
-		return 0;
+		return stat;
 	}
 
 	/**
 	 * Passes command info to your link layer.  See docs for full description.
 	 */
 	public int command(int cmd, int val) {
-		output.println("LinkLayer: Sending command "+cmd+" with value "+val);
-		return 0;
+		if (cmd > 3 || cmd < 0) {
+			return 0;
+		}
+		else {
+			control[cmd] = val;
+			return 0;
+		}
 	}
 	
 }
