@@ -19,12 +19,12 @@ public class Receiver implements Runnable {
 	private static final short BCAST = -1;
 
 	private PrintWriter output;
-	private State theState;
 	private short ourMAC;
 	private RF rf;
 	private ArrayBlockingQueue<Packet> acks;
 	private ArrayBlockingQueue<Transmission> trans;
 	private HashMap<Short, Short> seqs;
+	private HashMap<Short, Short> bcast;
 
 	enum State {
 		DATA, ACK
@@ -41,7 +41,7 @@ public class Receiver implements Runnable {
 		this.acks = acks;
 		this.trans = trans;
 		this.seqs = new  HashMap<>();
-		this.theState = State.ACK;
+		this.bcast = new HashMap<>();
 		this.output = output;
 	}
 
@@ -63,13 +63,14 @@ public class Receiver implements Runnable {
 			try {
 				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming);
-
-				switch(theState) {
-				case DATA: 
-					if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
-
-					//check if it's data and the destAddr is ourMAC or Broadcast
-					if ((newPacket.getDestAddr() == ourMAC || newPacket.getDestAddr() == BCAST)) {
+				
+				if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
+				
+				// HANDLING DATA PACKETS
+				if (newPacket.getType().equals("Data")) {
+					// for packets sent to our MAC specifically
+					if ((newPacket.getDestAddr() == ourMAC)) {
+						sendAck(newPacket);
 
 						// if MAC not in seqs, add MAC and seq#
 						if (!seqs.containsKey(newPacket.getSrcAddr())) {
@@ -97,22 +98,40 @@ public class Receiver implements Runnable {
 								if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
 							}
 						}
-
-
-						// only send ACK is packet was sent directly to ourMAC
-						if (newPacket.getDestAddr() == ourMAC) {
-							sendAck(newPacket);
+					}
+					
+					// HANDLING PACKETS SENT TO BROADCAST ADDRESS
+					if ((newPacket.getDestAddr() == BCAST)) {
+						if (!bcast.containsKey(newPacket.getSrcAddr())) {
+							bcast.put(newPacket.getSrcAddr(), newPacket.getSeq());
+							Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+							trans.add(newTrans);
+							if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to bcast HashMap with seq#: " + newPacket.getSeq());
 						}
-						theState = State.ACK;
+						
+						// if MAC is in bcast...
+						else {
+							// if we already have this packet from this MAC, do nothing
+							if (bcast.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
+								if (DEBUG) System.out.println("Already have that broadcast.");
+							}
+							// if this is a new packet, add it to the trans queue and update bcast with new seq# for this MAC
+							else {
+								if (bcast.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
+									output.print ("Packet received out of order");
+									if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
+								}
+								bcast.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+								trans.add(newTrans);
+								if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
+							}
+						}
 					}
-					break;
-					
-				case ACK:
-					if(newPacket.getType().equals("Data")) {
-						theState = State.DATA;
-						break;
-					}
-					
+				}
+				
+				// HANDLING ACK PACKETS
+				else {
 					// if addressed to ourMAC
 					if (newPacket.getDestAddr() == ourMAC) {
 						acks.add(newPacket);
@@ -123,7 +142,6 @@ public class Receiver implements Runnable {
 					else {
 						if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
 					}
-					break;
 				}
 			}
 			catch(Exception ex) {
