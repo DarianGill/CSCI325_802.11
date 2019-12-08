@@ -1,8 +1,9 @@
 package wifi;
 import java.util.concurrent.ArrayBlockingQueue;
 import rf.RF;
-import java.util.*;
+import java.util.HashMap;
 import java.io.PrintWriter;
+import java.util.zip.CRC32; 
 
 /**
  * Receiver will monitor the network for incoming data, which it will remove from it's packet and store in
@@ -25,10 +26,6 @@ public class Receiver implements Runnable {
 	private ArrayBlockingQueue<Transmission> trans;
 	private HashMap<Short, Short> seqs;
 	private HashMap<Short, Short> bcast;
-
-	enum State {
-		DATA, ACK
-	}
 
 	/**
 	 * Constructor for the Receiver object.
@@ -63,85 +60,94 @@ public class Receiver implements Runnable {
 			try {
 				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming);
-				
-				if (DEBUG) System.out.println("Packet received from MAC " + newPacket.getSrcAddr());
-				
-				// HANDLING DATA PACKETS
-				if (newPacket.getType().equals("Data")) {
-					// for packets sent to our MAC specifically
-					if ((newPacket.getDestAddr() == ourMAC)) {
-						sendAck(newPacket);
 
-						// if MAC not in seqs, add MAC and seq#
-						if (!seqs.containsKey(newPacket.getSrcAddr())) {
-							seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
-							Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
-							trans.add(newTrans);
-							if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to HashMap with seq#: " + newPacket.getSeq());
-						}
+				// Verify Checksum
+				CRC32 c = new CRC32();
+				c.update(newPacket.getPacket(), 0, (newPacket.getPacket().length-4));	  // Calculates checksum from control, addresses, and data
+				if (newPacket.getChksum() == (int) c.getValue()) {
 
-						// if MAC is in seqs...
-						else {
-							// if we already have this packet from this MAC, do nothing
-							if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
-								if (DEBUG) System.out.println("Already have that data.");
-							}
-							// if this is a new packet, add it to the trans queue and update seqs with new seq# for this MAC
-							else {
-								if ( seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
-									output.print ("Packet received out of order");
-									if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
-								}
-								seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+					if (DEBUG) System.out.println("Got a packet and checksum checks out!");
+
+					// HANDLING DATA PACKETS
+					if (newPacket.getType().equals("Data")) {
+						// for packets sent to our MAC specifically
+						if ((newPacket.getDestAddr() == ourMAC)) {						
+							sendAck(newPacket);
+
+							// if MAC not in seqs, add MAC and seq#
+							if (!seqs.containsKey(newPacket.getSrcAddr())) {
+								seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
 								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 								trans.add(newTrans);
-								if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
+								if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to HashMap with seq#: " + newPacket.getSeq());
+							}
+
+							// if MAC is in seqs...
+							else {
+								// if we already have this packet from this MAC, do nothing
+								if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
+									if (DEBUG) System.out.println("Already have that data.");
+								}
+								// if this is a new packet, add it to the trans queue and update seqs with new seq# for this MAC
+								else {
+									if ( seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
+										output.print ("Packet received out of order");
+										if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
+									}
+									seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+									Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+									trans.add(newTrans);
+									if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
+								}
+							}
+						}
+
+						// HANDLING PACKETS SENT TO BROADCAST ADDRESS
+						if ((newPacket.getDestAddr() == BCAST)) {
+							if (!bcast.containsKey(newPacket.getSrcAddr())) {
+								bcast.put(newPacket.getSrcAddr(), newPacket.getSeq());
+								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+								trans.add(newTrans);
+								if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to bcast HashMap with seq#: " + newPacket.getSeq());
+							}
+
+							// if MAC is in bcast...
+							else {
+								// if we already have this packet from this MAC, do nothing
+								if (bcast.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
+									if (DEBUG) System.out.println("Already have that broadcast.");
+								}
+								// if this is a new packet, add it to the trans queue and update bcast with new seq# for this MAC
+								else {
+									if (bcast.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
+										output.print ("Packet received out of order");
+										if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
+									}
+									bcast.replace(newPacket.getSrcAddr(), newPacket.getSeq());
+									Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
+									trans.add(newTrans);
+									if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
+								}
 							}
 						}
 					}
-					
-					// HANDLING PACKETS SENT TO BROADCAST ADDRESS
-					if ((newPacket.getDestAddr() == BCAST)) {
-						if (!bcast.containsKey(newPacket.getSrcAddr())) {
-							bcast.put(newPacket.getSrcAddr(), newPacket.getSeq());
-							Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
-							trans.add(newTrans);
-							if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to bcast HashMap with seq#: " + newPacket.getSeq());
+
+					// HANDLING ACK PACKETS
+					else {
+						// if addressed to ourMAC
+						if (newPacket.getDestAddr() == ourMAC) {
+							acks.add(newPacket);
+							if (DEBUG) System.out.println("Acknowledgment received.");
 						}
-						
-						// if MAC is in bcast...
+
+						// packet not addressed to ourMAC
 						else {
-							// if we already have this packet from this MAC, do nothing
-							if (bcast.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
-								if (DEBUG) System.out.println("Already have that broadcast.");
-							}
-							// if this is a new packet, add it to the trans queue and update bcast with new seq# for this MAC
-							else {
-								if (bcast.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
-									output.print ("Packet received out of order");
-									if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
-								}
-								bcast.replace(newPacket.getSrcAddr(), newPacket.getSeq());
-								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
-								trans.add(newTrans);
-								if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
-							}
+							if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
 						}
 					}
 				}
-				
-				// HANDLING ACK PACKETS
 				else {
-					// if addressed to ourMAC
-					if (newPacket.getDestAddr() == ourMAC) {
-						acks.add(newPacket);
-						if (DEBUG) System.out.println("Acknowledgment received.");
-					}
-
-					// packet not addressed to ourMAC
-					else {
-						if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
-					}
+					if (DEBUG) System.out.println("Sike! That's the wrong numbah! (wrong checksum)");
 				}
 			}
 			catch(Exception ex) {

@@ -137,7 +137,7 @@ public class Sender implements Runnable {
 							theState = State.WAITING;
 							if(DEBUG) System.out.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
-							timeoutAt = (theRF.clock() +	RF.aSIFSTime + RF.aSlotTime * 1000000*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+							timeoutAt = (theRF.clock() +	RF.aSIFSTime + RF.aSlotTime * 100*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
 							theState = State.ACKWAIT;
 						}
 						if(DEBUG) System.out.println("Sending, wish me luck");
