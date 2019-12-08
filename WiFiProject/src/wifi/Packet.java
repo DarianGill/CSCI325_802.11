@@ -37,7 +37,7 @@ import java.util.zip.CRC32;
  * @date 11.6.2019
  */
 public class Packet {
-	private String type; 	// Unsigned 3-bit short representing the packet type
+	private String type; 	// String representing the packet type
 	private boolean resend; // Boolean representing whether the packet has been sent before
 	private short seq;	   	// Unsigned 12-bit short sequence number
 	private short destAddr; // Unsigned 16-bit short destination address
