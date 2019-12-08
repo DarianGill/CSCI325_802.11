@@ -8,7 +8,7 @@ import java.util.HashMap;
 /**
  * Use this layer as a starting point for your project code.  See {@link Dot11Interface} for more
  * details on these routines.
- * @author richards
+ * @author richards, Darian Gill, Josh McMillan, Kyle Muir
  */
 public class LinkLayer implements Dot11Interface 
 {
@@ -18,7 +18,8 @@ public class LinkLayer implements Dot11Interface
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
 	private ArrayBlockingQueue<Transmission> trans;
-	public int stat;
+	private Integer stat;
+	private int[] control;
 	
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
@@ -34,11 +35,12 @@ public class LinkLayer implements Dot11Interface
 		this.acks = new ArrayBlockingQueue(10);
 		this.trans = new ArrayBlockingQueue<Transmission>(10);
 		this.stat = 0;
+		this.control = new int[4];
 		
-		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output);
+		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output, control);
 		new Thread(rec).start();
 		
-		Sender send = new Sender(theRF, this.packets, this.acks);
+		Sender send = new Sender(theRF, this.packets, this.acks, output, control);
 		new Thread(send).start();
 		
 		
@@ -51,6 +53,7 @@ public class LinkLayer implements Dot11Interface
 	 */
 	public int send(short dest, byte[] data, int len) {
 		if (packets.size() >= 4) {
+			stat = 10;
 			return 0;
 		}
 		else {
@@ -68,6 +71,7 @@ public class LinkLayer implements Dot11Interface
 	public int recv(Transmission t) {
 		int numBytes;
 		if (trans.size() >= 4) {
+			stat = 10;
 			return 0;
 		}
 		else {
@@ -96,8 +100,13 @@ public class LinkLayer implements Dot11Interface
 	 * Passes command info to your link layer.  See docs for full description.
 	 */
 	public int command(int cmd, int val) {
-		output.println("LinkLayer: Sending command "+cmd+" with value "+val);
-		return 0;
+		if (cmd > 3 || cmd < 0) {
+			return 0;
+		}
+		else {
+			control[cmd] = val;
+			return 0;
+		}
 	}
 	
 }
