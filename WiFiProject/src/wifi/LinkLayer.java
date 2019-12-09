@@ -20,6 +20,7 @@ public class LinkLayer implements Dot11Interface
 	private ArrayBlockingQueue<Transmission> trans;
 	private Integer stat;
 	private int[] control;
+	private Long fudge;
 	
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
@@ -36,15 +37,17 @@ public class LinkLayer implements Dot11Interface
 		this.trans = new ArrayBlockingQueue<Transmission>(10);
 		this.stat = 0;
 		this.control = new int[4];
+		this.fudge = 0L;
 		
-		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output, control);
+		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output, control, fudge, stat);
 		new Thread(rec).start();
 		
-		Sender send = new Sender(theRF, this.packets, this.acks, output, control);
+		Sender send = new Sender(theRF, ourMAC, this.packets, this.acks, output, control, fudge, stat);
 		new Thread(send).start();
 		
 		
-		output.println("LinkLayer: Constructor ran.");
+		output.println("LinkLayer initialized with MAC address " + ourMAC);
+		output.println("Send command 0 to see a list of supported commands");
 	}
 
 	/**
@@ -104,9 +107,20 @@ public class LinkLayer implements Dot11Interface
 			return 0;
 		}
 		else {
-			control[cmd] = val;
+			int beaconTime = 3;
+ 			control[cmd] = val;
+ 			if (cmd == 0) {
+				output.println("--------------- Commands and Settings ---------------");
+				output.println("Cmd #0: Display command options and current settings");
+				output.println("Cmd #1: Set Debug. Currently at 0");
+				output.println("        Use -1 for full debug output, o for no output");
+				output.println("Cmd #2: Set slot selection method. Currently random");
+				output.println("        Use 0 for random slot selection, any other value to use maxCW");
+				output.println("Cmd #3: Set beacon interval. Currently at " + beaconTime + " seconds");
+				output.println("        Value specifies seconds between the start of the beacons; -1 disables");
+				output.println("-----------------------------------------------------");
+			}
 			return 0;
 		}
-	}
-	
+	}	
 }
