@@ -447,18 +447,13 @@ public class Packet {
 	 * Returns a string representation of the packet byte array
 	 */
 	public String toString() {
-		String str = "Type: "+type+
-					 "\nResend: "+resend+
-					 "\nSeq: "+seq+
-					 "\nDestAddr: "+destAddr+
-					 "\nSrcAddr: "+srcAddr+
-					 "\nData: "+data.length+" bytes "+
-					 "\nChksum: "+(chksum)+"\n[ ";
-		byte[] packet = getPacket();
-		for (int i = 0; i < len; i++) {
-			str += (packet[i] & 0xFF) + " ";
-		}
-		str += "]\n";
+		String str = "< "+type+
+				" Resend:"+resend+
+				" Seq:"+seq+
+				" "+srcAddr+
+				"-->"+destAddr+
+				" Data:"+data.length+"bytes"+
+				" Chksum:"+(chksum)+" >";
 		return str;
 	}
 

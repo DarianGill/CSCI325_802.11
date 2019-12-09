@@ -16,7 +16,6 @@ import java.util.zip.CRC32;
  */
 public class Receiver implements Runnable {
 
-	private static final boolean DEBUG = true;
 	private static final short BCAST = -1;
 
 	private PrintWriter output;
@@ -26,13 +25,16 @@ public class Receiver implements Runnable {
 	private ArrayBlockingQueue<Transmission> trans;
 	private HashMap<Short, Short> seqs;
 	private HashMap<Short, Short> bcast;
+	private int[] control;
+	private Long fudge;
+	private Integer stat;
 
 	/**
 	 * Constructor for the Receiver object.
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output) {
+	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output, int[] control, Long fudge, Integer stat) {
 		this.ourMAC = ourMAC;
 		this.rf = rf;
 		this.acks = acks;
@@ -40,6 +42,9 @@ public class Receiver implements Runnable {
 		this.seqs = new  HashMap<>();
 		this.bcast = new HashMap<>();
 		this.output = output;
+		this.control = control;
+		this.fudge = fudge;
+		this.stat = stat;
 	}
 
 
@@ -54,10 +59,9 @@ public class Receiver implements Runnable {
 	 */
 	@Override
 	public void run() {
-		if (DEBUG) System.out.println("Receiver " + ourMAC + " is initialized. Tell me your secrets!");
-
 		while(true) {
 			try {
+				if (control[1] == -1) output.println("Receive has blocked, awaiting data");
 				byte[] incoming = rf.receive();
 				Packet newPacket = new Packet(incoming);
 
@@ -65,11 +69,15 @@ public class Receiver implements Runnable {
 				CRC32 c = new CRC32();
 				c.update(newPacket.getPacket(), 0, (newPacket.getPacket().length-4));	  // Calculates checksum from control, addresses, and data
 				if (newPacket.getChksum() == (int) c.getValue()) {
-
-					if (DEBUG) System.out.println("Got a packet and checksum checks out!");
+					
+					// HANDLING BEACONS
+					if (newPacket.getType().equals("Beacon")){
+						setFudge(getTime(newPacket.getData()));
+						if (control[1] == -1) output.println("Beacon packet!");
+					}
 
 					// HANDLING DATA PACKETS
-					if (newPacket.getType().equals("Data")) {
+					else if (newPacket.getType().equals("Data")) {
 						// for packets sent to our MAC specifically
 						if ((newPacket.getDestAddr() == ourMAC)) {						
 							sendAck(newPacket);
@@ -79,25 +87,25 @@ public class Receiver implements Runnable {
 								seqs.put(newPacket.getSrcAddr(), newPacket.getSeq());
 								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 								trans.add(newTrans);
-								if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to HashMap with seq#: " + newPacket.getSeq());
+								if (control[1] == -1) output.println("Queued incoming DATA packet with good CRC: " + newPacket.toString());
 							}
 
 							// if MAC is in seqs...
 							else {
 								// if we already have this packet from this MAC, do nothing
 								if (seqs.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
-									if (DEBUG) System.out.println("Already have that data.");
+									if (control[1] == -1) output.println("Already have that data.");
 								}
 								// if this is a new packet, add it to the trans queue and update seqs with new seq# for this MAC
 								else {
 									if ( seqs.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
 										output.print ("Packet received out of order");
-										if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
+										if (control[1] == -1) output.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
 									}
 									seqs.replace(newPacket.getSrcAddr(), newPacket.getSeq());
 									Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 									trans.add(newTrans);
-									if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
+									if (control[1] == -1) output.println("Queued incoming DATA packet with good CRC: " + newPacket.toString());
 								}
 							}
 						}
@@ -108,46 +116,44 @@ public class Receiver implements Runnable {
 								bcast.put(newPacket.getSrcAddr(), newPacket.getSeq());
 								Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 								trans.add(newTrans);
-								if (DEBUG) System.out.println(newPacket.getSrcAddr() + " added to bcast HashMap with seq#: " + newPacket.getSeq());
-							}
+								if (control[1] == -1) output.println("Queued incoming DATA packet with good CRC: " + newPacket.toString());							}
 
 							// if MAC is in bcast...
 							else {
 								// if we already have this packet from this MAC, do nothing
 								if (bcast.get(newPacket.getSrcAddr()) == newPacket.getSeq()) {
-									if (DEBUG) System.out.println("Already have that broadcast.");
+									if (control[1] == -1) output.println("Already have that broadcast.");
 								}
 								// if this is a new packet, add it to the trans queue and update bcast with new seq# for this MAC
 								else {
 									if (bcast.get(newPacket.getSrcAddr()) != newPacket.getSeq() - 1) {
 										output.print ("Packet received out of order");
-										if (DEBUG) System.out.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
+										if (control[1] == -1) output.println("Packet out of order. Packet seq #: " + newPacket.getSeq());
 									}
 									bcast.replace(newPacket.getSrcAddr(), newPacket.getSeq());
 									Transmission newTrans = new Transmission(newPacket.getSrcAddr(), ourMAC, newPacket.getData());
 									trans.add(newTrans);
-									if (DEBUG) System.out.println("Updated " + newPacket.getSrcAddr() + "'s seq# to: " + newPacket.getSeq());
-								}
+									if (control[1] == -1) output.println("Queued incoming DATA packet with good CRC: " + newPacket.toString());								}
 							}
 						}
 					}
 
 					// HANDLING ACK PACKETS
-					else {
+					else if (newPacket.getType().contentEquals("ACK")){
 						// if addressed to ourMAC
 						if (newPacket.getDestAddr() == ourMAC) {
 							acks.add(newPacket);
-							if (DEBUG) System.out.println("Acknowledgment received.");
+							if (control[1] == -1) output.println("Acknowledgment received.");
 						}
 
 						// packet not addressed to ourMAC
 						else {
-							if (DEBUG) System.out.println("Saw a packet...not for me...released it back into the wild.");
+							if (control[1] == -1) output.println("Saw a packet...not for me...released it back into the wild.");
 						}
 					}
 				}
 				else {
-					if (DEBUG) System.out.println("Sike! That's the wrong numbah! (wrong checksum)");
+					if (control[1] == -1) output.println("Sike! That's the wrong numbah! (wrong checksum)");
 				}
 			}
 			catch(Exception ex) {
@@ -157,9 +163,10 @@ public class Receiver implements Runnable {
 	}
 
 
-	public void sendAck(Packet ack) {
+	public void sendAck(Packet newPacket) {
 		if(!rf.inUse()) {
 			try {
+				Packet ack = new Packet(newPacket.getPacket());
 				// set frame type to ACK
 				ack.setType("ACK");
 
@@ -169,14 +176,44 @@ public class Receiver implements Runnable {
 				ack.setSrcAddr(temp);
 
 				// wait SIFS then send ack
+				long number = rf.clock();
+				Thread.sleep(50-(number%50));
 				Thread.sleep(RF.aSIFSTime);
+				Thread.sleep(50-(number%50));
+				if (control[1] == -1) output.println("Idle waited until " + rf.clock());
+				if (control[1] == -1) output.println("Sending ACK back to " + ack.getDestAddr() + ": " + ack.toString());
 				rf.transmit(ack.getPacket());
-
-				if (DEBUG) System.out.println("Sent ack to " + ack.getDestAddr());
 			}
 			catch (InterruptedException e) {
 				e.printStackTrace();
 			}
 		}
+	}
+	
+	public void setFudge(Long timeRecvd) {
+		Long diff = 0L;
+		System.out.println("Time: " + (timeRecvd - rf.clock()));
+		
+		if (timeRecvd > rf.clock()) {
+			//TODO: add experimentally determined extra fudge time
+			diff = timeRecvd - rf.clock();
+			System.out.println("Diff: " + diff);
+		}
+		this.fudge = diff;
+	}
+	
+	/**
+	 * The getTime method takes bytes from the data array and combines them to form a
+	 * 8-byte long representing the time that packet was sent.
+	 * 
+	 * @param b    - a byte array
+	 * @return time - an long representation of the time from the packet
+	 */
+	private long getTime(byte[] b) {
+		long time = ((int)b[0]) & 0xFF; // Casts the third byte into a long 
+		for (int i=1; i<b.length; i++) {
+			time = (time << 8) |  (((int)b[(i)]) & 0xFF); // Repeatedly appends the other byte to that long 
+		}
+		return time;
 	}
 }
