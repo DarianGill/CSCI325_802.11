@@ -26,13 +26,15 @@ public class Receiver implements Runnable {
 	private HashMap<Short, Short> seqs;
 	private HashMap<Short, Short> bcast;
 	private int[] control;
+	private Long fudge;
+	private Integer stat;
 
 	/**
 	 * Constructor for the Receiver object.
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output, int[] control) {
+	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output, int[] control, Long fudge, Integer stat) {
 		this.ourMAC = ourMAC;
 		this.rf = rf;
 		this.acks = acks;
@@ -41,6 +43,8 @@ public class Receiver implements Runnable {
 		this.bcast = new HashMap<>();
 		this.output = output;
 		this.control = control;
+		this.fudge = fudge;
+		this.stat = stat;
 	}
 
 
@@ -68,6 +72,7 @@ public class Receiver implements Runnable {
 					
 					// HANDLING BEACONS
 					if (newPacket.getType().equals("Beacon")){
+						setFudge(getTime(newPacket.getData()));
 						if (control[1] == -1) output.println("Beacon packet!");
 					}
 
@@ -183,5 +188,32 @@ public class Receiver implements Runnable {
 				e.printStackTrace();
 			}
 		}
+	}
+	
+	public void setFudge(Long timeRecvd) {
+		Long diff = 0L;
+		System.out.println("Time: " + (timeRecvd - rf.clock()));
+		
+		if (timeRecvd > rf.clock()) {
+			//TODO: add experimentally determined extra fudge time
+			diff = timeRecvd - rf.clock();
+			System.out.println("Diff: " + diff);
+		}
+		this.fudge = diff;
+	}
+	
+	/**
+	 * The getTime method takes bytes from the data array and combines them to form a
+	 * 8-byte long representing the time that packet was sent.
+	 * 
+	 * @param b    - a byte array
+	 * @return time - an long representation of the time from the packet
+	 */
+	private long getTime(byte[] b) {
+		long time = ((int)b[0]) & 0xFF; // Casts the third byte into a long 
+		for (int i=1; i<b.length; i++) {
+			time = (time << 8) |  (((int)b[(i)]) & 0xFF); // Repeatedly appends the other byte to that long 
+		}
+		return time;
 	}
 }
