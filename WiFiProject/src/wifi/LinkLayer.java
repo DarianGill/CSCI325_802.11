@@ -18,10 +18,10 @@ public class LinkLayer implements Dot11Interface
 	private ArrayBlockingQueue<Packet> packets;
 	private ArrayBlockingQueue<Packet> acks;
 	private ArrayBlockingQueue<Transmission> trans;
-	private Integer stat;
+	private int[] stat;
 	private int[] control;
 	private Long fudge;
-	
+
 	/**
 	 * Constructor takes a MAC address and the PrintWriter to which our output will
 	 * be written.
@@ -29,23 +29,34 @@ public class LinkLayer implements Dot11Interface
 	 * @param output  Output stream associated with GUI
 	 */
 	public LinkLayer(short ourMAC, PrintWriter output) {
-		this.ourMAC = ourMAC;
-		this.output = output;      
-		theRF = new RF(null, null);
+		this.stat = new int[] {0};
+		if(ourMAC == -1) {
+			System.exit(1);
+		}
+		else { 
+			this.ourMAC = ourMAC;
+		}
+		this.output = output;   
+		try {
+			theRF = new RF(null, null);
+		}
+		catch (Exception e) {
+			this.stat[0] = 3;  // RF layer failed to initialize
+			e.printStackTrace();
+		}
 		this.packets = new ArrayBlockingQueue(10);
 		this.acks = new ArrayBlockingQueue(10);
 		this.trans = new ArrayBlockingQueue<Transmission>(10);
-		this.stat = 0;
-		this.control = new int[4];
+		this.control = new int[] {0, 0, 0, 0};
 		this.fudge = 0L;
-		
+
 		Receiver rec = new Receiver(theRF, ourMAC, acks, trans, output, control, fudge, stat);
 		new Thread(rec).start();
-		
+
 		Sender send = new Sender(theRF, ourMAC, this.packets, this.acks, output, control, fudge, stat);
 		new Thread(send).start();
-		
-		
+
+		this.stat[0] = 1; // 802.11~ Initialized
 		output.println("LinkLayer initialized with MAC address " + ourMAC);
 		output.println("Send command 0 to see a list of supported commands");
 	}
@@ -56,10 +67,11 @@ public class LinkLayer implements Dot11Interface
 	 */
 	public int send(short dest, byte[] data, int len) {
 		if (packets.size() >= 4) {
-			stat = 10;
+			stat[0] = 10; // Outgoing transmission rejected due to insufficient buffer space
 			return 0;
 		}
 		else {
+			System.out.println("Status: " + stat[0]);
 			output.println("LinkLayer: Sending "+len+" bytes to "+dest);
 			Packet packet = new Packet("Data", false, (short)0, dest, this.ourMAC, data, len + 10); //adding 10 to len here is to make the length of the full packet vs. just the data length
 			packets.add(packet);
@@ -72,20 +84,25 @@ public class LinkLayer implements Dot11Interface
 	 * the Transmission object.  See docs for full description.
 	 */
 	public int recv(Transmission t) {
-		int numBytes;
-		if (trans.size() >= 4) {
-			stat = 10;
-			return 0;
+		int numBytes = 0;
+		if (t == null) {
+			stat[0] = 7; // Null pointer
 		}
 		else {
-			while(true) {
-				if (trans.peek() != null) {
-					Transmission temp = trans.poll();
-					t.setBuf(temp.getBuf());
-					t.setDestAddr(temp.getDestAddr());
-					t.setSourceAddr(temp.getSourceAddr());
-					numBytes = t.getBuf().length;
-					break;
+			if (trans.size() >= 4) {
+				// stat = 10; // Incoming transmission rejected due to insufficient buffer space
+				return 0;
+			}
+			else {
+				while(true) {
+					if (trans.peek() != null) {
+						Transmission temp = trans.poll();
+						t.setBuf(temp.getBuf());
+						t.setDestAddr(temp.getDestAddr());
+						t.setSourceAddr(temp.getSourceAddr());
+						numBytes = t.getBuf().length;
+						break;
+					}
 				}
 			}
 		}
@@ -96,7 +113,7 @@ public class LinkLayer implements Dot11Interface
 	 * Returns a current status code.  See docs for full description.
 	 */
 	public int status() {
-		return stat;
+		return stat[0];
 	}
 
 	/**
@@ -104,16 +121,17 @@ public class LinkLayer implements Dot11Interface
 	 */
 	public int command(int cmd, int val) {
 		if (cmd > 3 || cmd < 0) {
+			this.stat[0] = 9;  // illegal argument 
 			return 0;
 		}
 		else {
-			int beaconTime = 3;
  			control[cmd] = val;
+ 			int beaconTime = control[3];
  			if (cmd == 0) {
 				output.println("--------------- Commands and Settings ---------------");
 				output.println("Cmd #0: Display command options and current settings");
 				output.println("Cmd #1: Set Debug. Currently at 0");
-				output.println("        Use -1 for full debug output, o for no output");
+				output.println("        Use -1 for full debug output, 0 for no output");
 				output.println("Cmd #2: Set slot selection method. Currently random");
 				output.println("        Use 0 for random slot selection, any other value to use maxCW");
 				output.println("Cmd #3: Set beacon interval. Currently at " + beaconTime + " seconds");
