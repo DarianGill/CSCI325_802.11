@@ -27,14 +27,14 @@ public class Receiver implements Runnable {
 	private HashMap<Short, Short> bcast;
 	private int[] control;
 	private Long fudge;
-	private Integer stat;
+	private int[] stat;
 
 	/**
 	 * Constructor for the Receiver object.
 	 * @param id	this is the "MAC address"
 	 * @param rf	this is the RF layer the Receiver is using
 	 */
-	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output, int[] control, Long fudge, Integer stat) {
+	public Receiver(RF rf, short ourMAC, ArrayBlockingQueue<Packet> acks, ArrayBlockingQueue<Transmission> trans, PrintWriter output, int[] control, Long fudge, int[] stat) {
 		this.ourMAC = ourMAC;
 		this.rf = rf;
 		this.acks = acks;
@@ -176,11 +176,11 @@ public class Receiver implements Runnable {
 				ack.setSrcAddr(temp);
 
 				// wait SIFS then send ack
-				long number = rf.clock();
+				long number = getClock();
 				Thread.sleep(50-(number%50));
 				Thread.sleep(RF.aSIFSTime);
 				Thread.sleep(50-(number%50));
-				if (control[1] == -1) output.println("Idle waited until " + rf.clock());
+				if (control[1] == -1) output.println("Idle waited until " + getClock());
 				if (control[1] == -1) output.println("Sending ACK back to " + ack.getDestAddr() + ": " + ack.toString());
 				rf.transmit(ack.getPacket());
 			}
@@ -191,15 +191,11 @@ public class Receiver implements Runnable {
 	}
 	
 	public void setFudge(Long timeRecvd) {
-		Long diff = 0L;
-		System.out.println("Time: " + (timeRecvd - rf.clock()));
-		
-		if (timeRecvd > rf.clock()) {
-			//TODO: add experimentally determined extra fudge time
-			diff = timeRecvd - rf.clock();
-			System.out.println("Diff: " + diff);
+		long crntTime = getClock();
+		if ((timeRecvd + 2) > crntTime) {
+			this.fudge = timeRecvd - crntTime;
+			System.out.println("Diff: " + this.fudge);
 		}
-		this.fudge = diff;
 	}
 	
 	/**
@@ -215,5 +211,9 @@ public class Receiver implements Runnable {
 			time = (time << 8) |  (((int)b[(i)]) & 0xFF); // Repeatedly appends the other byte to that long 
 		}
 		return time;
+	}
+	
+	private long getClock() {
+		return rf.clock() + this.fudge;
 	}
 }
