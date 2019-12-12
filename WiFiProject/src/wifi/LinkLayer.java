@@ -71,7 +71,6 @@ public class LinkLayer implements Dot11Interface
 			return 0;
 		}
 		else {
-			System.out.println("Status: " + stat[0]);
 			output.println("LinkLayer: Sending "+len+" bytes to "+dest);
 			Packet packet = new Packet("Data", false, (short)0, dest, this.ourMAC, data, len + 10); //adding 10 to len here is to make the length of the full packet vs. just the data length
 			packets.add(packet);

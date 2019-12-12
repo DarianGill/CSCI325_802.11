@@ -8,7 +8,17 @@ import java.util.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-
+/**
+ * Builds packets. Sends them...
+ * 
+ * Okay but more specifically, there is a state diagram that is looped through which attempts to recreate the 
+ * 802.11 spec. There are 4 states in the switch (one for acquiring data, deciding if we need to do additional waiting,
+ * backoff assignment and waiting, and ack wait). This runnable method handles the send() calls in link layer
+ * which come from up above.
+ * 
+ * @author Josh McMillan
+ *
+ */
 public class Sender implements Runnable {
 
 
@@ -26,10 +36,10 @@ public class Sender implements Runnable {
 	private int[] stat;
 
 	enum State{
-		WAITING, HASDATA, BACKOFF, ACKWAIT		//add more cases here as we get there
+		WAITING, HASDATA, BACKOFF, ACKWAIT		
 	}
 
-	//take in a queue and manipulate that queue in the send method, will that hold for this to pull from??
+	
 	public Sender(RF theRF, short ourMAC, ArrayBlockingQueue<Packet> packets, ArrayBlockingQueue<Packet> acks, PrintWriter output, int[] control, Long fudge, int[] stat) {///take in RF so it can send, a queue that will be manipulated w/ data, what else?
 		this.packets = packets;
 		this.acks = acks;
@@ -44,12 +54,24 @@ public class Sender implements Runnable {
 		this.stat = stat;
 	}
 	
+	/**
+	 * A method to return what we really consider the clock time, accounts for how far ahead how beacons have been
+	 * 
+	 * @return a long representing the clock time
+	 */
 	private long getClock() {
 		return theRF.clock() + fudge;
 	}
 
 
-	private int setWaitTime(int resets) {//be careful about when to call this and actually get a new wait time
+	/**
+	 * A method to set the wait time in slots for a packet's collision window. There is an option to force the 
+	 * collision window to be the max size it can be.
+	 * 
+	 * @param resets how many times we've tried to send already
+	 * @return the number of slots we should wait
+	 */
+	private int setWaitTime(int resets) {
 		int max = (int)(Math.pow(2,resets))-1;
 		if(max>RF.aCWmax) {
 			max = RF.aCWmax;
@@ -57,24 +79,25 @@ public class Sender implements Runnable {
 		if(max<RF.aCWmin) {
 			max = RF.aCWmin;
 		}
-		System.out.println("The max our window can be is "+max+" slots.");
 		if (control[1] == -1) output.println("Starting collision window at [0..." + max + "]");
 		if(control[2]!=0) {
-			System.out.println("The actual window is "+max+" slots.");
+			if (control[1] == -1) output.println("The choosen window is "+max+" slots.");
 			return max;
 		}else {
-			int actual = rand.nextInt(max);	//returning number of slots to wait
-			System.out.println("The actual window is "+actual+" slots.");
+			int actual = rand.nextInt(max);	
+			if (control[1] == -1) output.println("The choosen window is "+actual+" slots.");
 			return actual;
 		}
 	}
 
 	
+	/**
+	 * This method waits until a 50ms boundary, to be called any time we need to get to a boundary.
+	 */
 	private void waitToBoundary() {
 		try {
 			long number = getClock();
 			Thread.sleep(50-(number%50));
-			//System.out.println("This is the boundary: "+ getClock()+"this is when we got called " +number+ " this is the amt we waited "+(50-(number%50)));
 		} catch (InterruptedException e) {
 			this.stat[0] = 2;
 			e.printStackTrace();
@@ -98,13 +121,16 @@ public class Sender implements Runnable {
 	}
 	
 
+	/**
+	 * The big boy. Does all of the waiting and sending and ack waiting. All of the fun things that
+	 * make an 802.11 live in here. The switch statement encompasses the cases at which we can arrive 
+	 * based on a situation. From every state there are other options to loop through to execute the sending
+	 * of a packet over an RF layer.
+	 * 
+	 */
 	@Override
 	public void run() {
-		// TODO Auto-generated method stub
-		//loop through switch statement to determine where in flowchart we are, do different stuff in each section of the switch statement
-		//call packet class and make packet
-		//take in new data somehow
-		//eventually send the data
+
 		int difs = RF.aSIFSTime + (2*RF.aSlotTime);
 		boolean used = true;
 		int resets = 1;
@@ -113,25 +139,24 @@ public class Sender implements Runnable {
 		long startTime = 0;
 		long endTime = 0;
 		long lastBeacon = 0;
+		long idleTime = 0;
 
-		//some kind of looping mechanism here??
 		while(true) {
 			try {
-				switch(theState) {	//the state is an integer corresponding to the case to enter
+				switch(theState) {	
 				case WAITING:
 					//waiting for packet
 					if(control[3] > 0 && getClock()-lastBeacon>=(control[3]*1000)) {
-						// do beacon stuff
+						
 						// make a beacon with our clock+processing time as the data
 						lastBeacon = getClock();
 						used = theRF.inUse();
-						byte[] bytes = longToBytes(lastBeacon + 2400);	//NEED TO ADD PROCESSING TIME HERE
+						byte[] bytes = longToBytes(lastBeacon + 2400);	
 						packToSend = new Packet("Beacon", false, (short)0, (short)-1, this.ourMAC, bytes, 18);//new beacon packet with clock+processing as data
 						
 						theState = State.HASDATA;		//used has been set to see if we were busy when first tried
 						if(control[1] == -1) output.println("Sending a beacon...");
 						waitToBoundary();
-						//System.out.println("This is the boundary: "+ getClock());
 						try {
 							Thread.sleep(difs);
 						} catch (InterruptedException e) {
@@ -141,25 +166,23 @@ public class Sender implements Runnable {
 						waitToBoundary();
 
 					}else {
-						if(packets.peek() != null) {	//need to see if channel is busy right here to see if sending after difs
-							used = this.theRF.inUse();	//see if channel is busy at get data
+						if(packets.peek() != null) {	
+							used = this.theRF.inUse();	
 							packToSend = packets.poll();
 
 							//Check Seq Num
 							//if dest already used, update seq num to what is in hashmap + 1 and update hashmap
 							if (seqs.containsKey(packToSend.getDestAddr())) {
 								packToSend.setSeq((short) (seqs.get(packToSend.getDestAddr())+1));
-								seqs.replace(packToSend.getDestAddr(), (short) (seqs.get(packToSend.getDestAddr())+1)); //Wrap Around?
+								seqs.replace(packToSend.getDestAddr(), (short) (seqs.get(packToSend.getDestAddr())+1)); 
 							}
 							//else put new dest addr into hashmap and pair with default seq num (0)
 							else {
 								seqs.put(packToSend.getDestAddr(), packToSend.getSeq());
 							}
 
-							theState = State.HASDATA;		//used has been set to see if we were busy when first tried
-							if(control[1] == -1) output.println("Got a packet to send...");
+							theState = State.HASDATA;		
 							waitToBoundary();
-							//System.out.println("This is the boundary: "+ getClock());
 							try {
 								Thread.sleep(difs);
 							} catch (InterruptedException e) {
@@ -167,28 +190,26 @@ public class Sender implements Runnable {
 								e.printStackTrace();
 							}
 							waitToBoundary();
-							//System.out.println("This is the boundary: "+ getClock());
 						}
 					}
 					break;
 				case HASDATA:	//has packet and waited DIFS, check if idle and if idle when started
-					//just to see the format
+					if (control[1] == -1) output.println("Idle waited for " + (getClock() - idleTime));
+					resets = 1;
 					if(used||this.theRF.inUse()) {
 						if(control[1] == -1) output.println("Gonna have to do some waiting...");
-						//do some exponential backoff type stuff
-						numWaitSlots = setWaitTime(resets);//for each waitSlot, sleep a slot time
+						numWaitSlots = setWaitTime(resets); //for each waitSlot, sleep a slot time
 						theState = State.BACKOFF;
 					}else {
 						this.theRF.transmit(packToSend.getPacket());
 						endTime = getClock();
 						if(control[1] == -1) output.println("Transmitting DATA after DIFS+SLOTs wait at " + getClock());
 						if(packToSend.getDestAddr()==-1) {
+							idleTime = getClock();
 							theState = State.WAITING;
-							// if(control[1] == -1) output.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
 							timeoutAt = (getClock()+	RF.aSIFSTime + 6*RF.aSlotTime);
-							// System.out.println("Timeout amount: " + timeoutAt);
-							theState = State.ACKWAIT;		//eventually want to have a loop where once the network gets busy we wait DIFS and then count down
+							theState = State.ACKWAIT;
 							if(control[1] == -1) output.println("Moving to ACKWAIT after sending DATA");
 						}
 					}
@@ -196,19 +217,15 @@ public class Sender implements Runnable {
 				case BACKOFF:
 					if(control[1] == -1) output.println("I'm being patient, waiting my collision window...");
 					for(int i = 0;i<numWaitSlots;i++) {
-						if(this.theRF.inUse()) {//if busy pause and wait difs
+						if(this.theRF.inUse()) {
 							waitToBoundary();
-							//System.out.println("This is the boundary: "+ getClock());
 							Thread.sleep(difs);
 							waitToBoundary();
-							//System.out.println("This is the boundary: "+ getClock());
 							i--;	//didn't wait a slot this iteration so don't break the loop early
 						}else {
 							waitToBoundary();
-							//System.out.println("This is the boundary: "+ getClock());
 							Thread.sleep(RF.aSlotTime);
 							waitToBoundary();
-							//System.out.println("This is the boundary: "+ getClock());
 						}
 						//otherwise count down 1 by 1 slots
 
@@ -221,23 +238,23 @@ public class Sender implements Runnable {
 					}else {
 						this.theRF.transmit(packToSend.getPacket());//end if its idle after all our waiting
 						if(packToSend.getDestAddr()==-1) {
+							idleTime = getClock();
 							theState = State.WAITING;
 							if(control[1] == -1) output.println("Sending, wish me luck... I spy a broadcast packet");
 						}else {
-							timeoutAt = (getClock() +	RF.aSIFSTime + 6*RF.aSlotTime);			//will eventually determine this real value in checkpoint 4 //how long in millis to wait to timeout; //SIFS+ACKtransmissionTime+RF.aSlotTime
+							timeoutAt = (getClock() +	RF.aSIFSTime + 6*RF.aSlotTime);			
 							theState = State.ACKWAIT;
 						}
 						if(control[1] == -1) output.println("Sending, wish me luck");
 					}
 					break;
-					//what to do if we waited backoff and still busy, GO BACK TO THE BEGINNNING WAIT DIFS ONLY AND TRY IT
-					//check if its empty while waiting backoff??		//should implement pausing and count down slot by slot (have method for this)
+					
+					
 				case ACKWAIT://see if we get an ack back for what we finally sent, if we don't then we need to increase exp backoff
-					//System.out.println("Timeout amount: " + timeoutAt + "\tSystem time: " + getClock());
-					//System.out.println("Acks size: " + acks.toString());
 					if(acks.isEmpty() && getClock()>=timeoutAt){
 						if(resets-1>=RF.dot11RetryLimit) {
 							this.stat[0] = 5; // Last packet failed to deliver successfully
+							idleTime = getClock();
 							theState = State.WAITING;
 							if(control[1] == -1) output.println("Moving to WAITING after exceeding retry limit");
 						}else {
@@ -250,20 +267,14 @@ public class Sender implements Runnable {
 						}
 						//see if we've waited our max time to expect an ack
 						//if we have then numWaitSlots = setWaitTime(resets+1) and go to BACKOFF
-						//is there a max number of retries??
 
 					}else {	//cool we got acked for the thing we wanted to
 						if (!acks.isEmpty()) {
 							if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
-								// endTime = System.currentTimeMillis();
-								// if(control[1] == -1) output.println("Packet seq#: " + packToSend.getSeq());
-								// if(control[1] == -1) output.println("ACK seq#: " + acks.peek().getSeq());
-								// if(control[1] == -1) output.println("SEQ#: Hashmap " + seqs.toString());
 								acks.take();
 								this.stat[0] = 4; // ACK was received so packet was delivered successfully
-								System.out.println("Sender status: " + stat[0]);
+								idleTime = getClock();
 								theState = State.WAITING;
-								// if(control[1] == -1) output.println("Transmit time: " + ((endTime - startTime)/RF.aSlotTime) + " slots.");
 								if(control[1] == -1) output.println("Got a valid ACK: " + acks.toString());
 		
 							}else {
@@ -271,6 +282,7 @@ public class Sender implements Runnable {
 									if(acks.peek().getSeq() == packToSend.getSeq()&&acks.peek().getSrcAddr() == packToSend.getDestAddr()) {
 										acks.take();
 										this.stat[0] = 4; // ACK was received so packet was delivered successfully
+										idleTime = getClock();
 										theState = State.WAITING;
 										if(control[1] == -1) output.println("Got a valid ACK: " + acks.toString());	//looking for our ack if theres a few in the queue
 										break;
@@ -282,10 +294,6 @@ public class Sender implements Runnable {
 						}
 					}
 					break;
-					//resets++; //if we don't get an ack back in the timeout time
-					//}
-
-					//increment resends	//only time backoff is increased is if we don't hear back
 				}
 
 			}
@@ -295,7 +303,7 @@ public class Sender implements Runnable {
 			}
 
 			try {
-				Thread.sleep(5);			//wait some after each loop so we're not busy waiting
+				Thread.sleep(5);
 			}
 			catch (InterruptedException e) {
 				this.stat[0] = 2;

@@ -157,12 +157,17 @@ public class Receiver implements Runnable {
 				}
 			}
 			catch(Exception ex) {
+				this.stat[0] = 2;
 				ex.printStackTrace();
 			}
 		}
 	}
 
-
+	/**
+	 * Sends pack ack back.
+	 * 
+	 * @param newPacket		received packet
+	 */
 	public void sendAck(Packet newPacket) {
 		if(!rf.inUse()) {
 			try {
@@ -185,16 +190,21 @@ public class Receiver implements Runnable {
 				rf.transmit(ack.getPacket());
 			}
 			catch (InterruptedException e) {
+				this.stat[0] = 2;
 				e.printStackTrace();
 			}
 		}
 	}
-	
+
+	/**
+	 * Takes the timestamp from the received packet, compares to our time stamp and, if the new one is larger, 
+	 * add the difference to our time.
+	 * @param timeRecvd		timestamp from the received packet
+	 */
 	public void setFudge(Long timeRecvd) {
 		long crntTime = getClock();
 		if ((timeRecvd + 2) > crntTime) {
 			this.fudge = timeRecvd - crntTime;
-			System.out.println("Diff: " + this.fudge);
 		}
 	}
 	
